@@ -138,6 +138,48 @@ HAL_ChibiOS_K3::HAL_ChibiOS_K3() :
   whether or not the stop that follows succeeds, and the ordering must already
   be correct on the day the reset starts working.
 */
+/*
+  GPS integration, step 0: is MAIN_UART6 (GPS's UART on Linux, base
+  0x02860000 -- same 16550-compatible IP as AM67_UART1_BASE/0x02810000 which
+  SD1/RCInput already drives successfully, just a different Main-domain
+  instance, 5 slots over) actually reachable from this R5F core at all?
+
+  This does NOT prove the domain-isolation story in kurulum_rehberi.txt is
+  right or wrong on its own -- SD1 already disproves the blanket "MCU domain
+  can never reach Main domain" claim, since UART1 is main_uart1, itself
+  Main-domain, and it works. What's still unknown for UART6 specifically is
+  (a) whether R5F's bus master ID is allowed through to *this* instance by
+  the DMSC/sysfw resource-partition config, and (b) whether Linux's
+  serial8250-omap driver is still bound to ttyS6 and would race us -- see the
+  GPS section of the project notes for the full reasoning.
+
+  Deliberately the smallest possible test: one 32-bit read of LSR (Line
+  Status Register), a read-only, non-destructive register that always holds
+  a real value once out of reset. No writes, no interrupt, no SerialDriver
+  machinery -- same "prove the physical path independently of the real
+  driver" approach already used for TX on UART1 (am67_uart1_poll_tx) and for
+  SPI0 (spi_lld_polled_exchange, after the interrupt-driven spiExchange()
+  hung forever because SPI0's interrupt line was never routed to this core's
+  VIM). If R5F cannot reach this address, expect a Data Abort here instead of
+  a return -- i.e. the trace log stopping dead at "uart6 probe: reading
+  LSR..." with no "-> " line after it is itself the answer, not a crash to
+  panic over. Reboot and report back if that happens.
+
+  UART_LSR_OFFSET comes from hal_serial_lld.h (pulled in via <hal.h> above);
+  reusing it here rather than a bare 0x14U keeps this tied to the real
+  register map instead of a magic number.
+*/
+#define AM67_UART6_BASE 0x02860000U
+
+static void am67_uart6_probe(void)
+{
+    trace_printf("AP-K3: gps: uart6 probe: reading LSR at %x...\n",
+                 (uint32_t)AM67_UART6_BASE);
+    uint32_t lsr = *(volatile uint32_t *)(AM67_UART6_BASE + UART_LSR_OFFSET);
+    trace_printf("AP-K3: gps: uart6 probe: LSR -> %x (reached, no abort)\n",
+                 lsr);
+}
+
 static bool mailbox_message(uint32_t msg)
 {
     switch (msg) {
@@ -241,6 +283,10 @@ void HAL_ChibiOS_K3::run(int argc, char* const argv[], Callbacks* callbacks) con
        see board_drivers.cpp. Call it explicitly here instead. */
     rcin->init();
     trace_printf("AP-K3: rcin->init done (iBus on SD1 RX, pin 10)\n");
+
+    /* GPS integration step 0 -- see am67_uart6_probe()'s comment above for
+       why this is here and what a stuck trace log after it would mean. */
+    am67_uart6_probe();
 
     /* PWM safety (M2): SERVOx_FUNCTION defaults to disabled and Storage is
        Empty:: (nothing persists), so SRV_Channels will not touch any output
