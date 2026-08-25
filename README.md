@@ -42,10 +42,6 @@ hâliyle burada tek repo olarak birleştirildi:
   dal `gemstone-o1-r5f`. Yukarıdakinin derleme bağımlılığı; burada
   [modules/ChibiOS-Gemstone-O1-Port/](modules/ChibiOS-Gemstone-O1-Port/) altında.
 
-İki depo, tüm katkı/orijinal geliştirme **emirhan-sonmez**'e ait. Bu repo
-onları tek klasörde derlenebilir hâlde toplayan, T3 Gemstone O1 kartında
-gerçekten uçuşla doğrulanmış bir anlık görüntü (snapshot).
-
 `deploy/` altında ayrıca karta ve host makineye kurulan, kaynak
 depolarının hiçbirinde bulunmayan parçalar var: board-native parametre
 depolama daemon'u, host↔R5F arası paylaşımlı bellek üzerinden MAVLink
