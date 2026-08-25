@@ -1,0 +1,23 @@
+[Unit]
+Description=Enable EHRPWM0/EHRPWM1 clocks (idle duty) so the MCU R5F's motor outputs have a running timebase
+DefaultDependencies=no
+After=sysinit.target
+Before=basic.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c ' \
+  echo 0 > /sys/class/pwm/pwmchip3/export 2>/dev/null; \
+  echo 0 > /sys/class/pwm/pwmchip4/export 2>/dev/null; \
+  sleep 0.2; \
+  echo 20000000 > /sys/class/pwm/pwmchip3/pwm0/period 2>/dev/null; \
+  echo 1000000 > /sys/class/pwm/pwmchip3/pwm0/duty_cycle 2>/dev/null; \
+  echo 1 > /sys/class/pwm/pwmchip3/pwm0/enable 2>/dev/null; \
+  echo 20000000 > /sys/class/pwm/pwmchip4/pwm0/period 2>/dev/null; \
+  echo 1000000 > /sys/class/pwm/pwmchip4/pwm0/duty_cycle 2>/dev/null; \
+  echo 1 > /sys/class/pwm/pwmchip4/pwm0/enable 2>/dev/null; \
+  true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

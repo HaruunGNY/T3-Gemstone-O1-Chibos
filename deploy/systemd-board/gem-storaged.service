@@ -1,0 +1,15 @@
+[Unit]
+Description=Gemstone O1 R5F parameter/calibration storage persistence (runs natively on the board, no SSH/host dependency)
+DefaultDependencies=no
+After=sysinit.target
+Before=basic.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/gemstone/gem_storaged.py
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=sysinit.target
