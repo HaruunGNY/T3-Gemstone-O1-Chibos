@@ -1,85 +1,227 @@
-# T3 Gemstone O1 — ArduCopter on ChibiOS (MCU R5F)
+# T3 Gemstone O1 — ChibiOS Üzerinde ArduCopter Kurulumu
 
-Gerçek ArduCopter'ı, T3 Gemstone O1 kartının Linux/A53 çekirdekleri yerine
-doğrudan **MCU domain Cortex-R5F** çekirdeğinde, ChibiOS RTOS üzerinde
-çalıştıran kurulum. Bu depo, 2026-08-18'de gerçek uçuşla doğrulanmış hâliyle
-gereken **tüm parçaları tek bir yerde** toplar: ArduPilot kaynağı + özel HAL,
-altında çalışan ChibiOS portu, ve karta/host'a kurulan tüm dağıtım (deploy)
-dosyaları.
+Bu doküman, T3 Gemstone O1 kartında gerçek ArduCopter uçuş kontrolcüsünü,
+Linux yerine doğrudan kartın **R5F** çekirdeğinde, **ChibiOS** adlı bir
+gerçek-zamanlı işletim sistemi (RTOS) üzerinde çalıştırmayı anlatır.
 
-## Bu ne, neden var
+Hedef kitle: bu konuda **hiçbir ön bilgisi olmayan biri**. Terminal kullanmayı
+biliyorsanız (komut kopyalayıp yapıştırabiliyorsanız) yeterli — geri kalan her
+kavram aşağıda açıklanıyor. Bu kurulum 2026-08-18'de gerçek donanımda uçuşla
+doğrulandı, yani burada anlatılanlar "teoride çalışır" değil, fiilen çalışmış
+bir sonuç.
 
-T3 Gemstone O1 kartının iki ayrı işlemci çekirdeği var:
+## İçindekiler
 
-- **A53 çekirdekleri**: normal Linux çalışır (Ubuntu), SSH ile buradan girilir.
-- **MCU domain Cortex-R5F ("R5F")**: ayrı, küçük bir gömülü çekirdek. Linux'un
-  `remoteproc` mekanizmasıyla bu çekirdeğe bir `.elf` firmware yüklenip
-  çalıştırılabilir.
+1. [Bu proje ne, neden var](#1-bu-proje-ne-neden-var)
+2. [Kavramlar sözlüğü](#2-kavramlar-sözlüğü-önce-bunu-okuyun)
+3. [Güvenlik uyarısı](#3-güvenlik-uyarısı-önce-okuyun)
+4. [Gerekli donanım](#4-gerekli-donanım)
+5. [Host bilgisayarda yazılım kurulumu](#5-host-bilgisayarda-yazılım-kurulumu)
+6. [Depoyu edinme](#6-depoyu-edinme)
+7. [Derleme](#7-derleme)
+8. [Karta ilk deploy (test amaçlı, kalıcı değil)](#8-karta-ilk-deploy-test-amaçlı-kalıcı-değil)
+9. [Kalıcı hale getirme](#9-kalıcı-hale-getirme)
+10. [QGroundControl bağlantısı](#10-qgroundcontrol-bağlantısı)
+11. [Doğrulama listesi](#11-doğrulama-listesi)
+12. [Bilinen kısıtlamalar](#12-bilinen-kısıtlamalar)
+13. [Sorun giderme](#13-sorun-giderme)
+14. [Depo yapısı](#14-depo-yapısı)
 
-Kartın varsayılan hâli: R5F'te TI'ın stok "echo" firmware'i (işe yaramaz),
-Linux tarafında ArduCopter gerçek uçuş kontrolcüsü olarak çalışır
-(`AP_HAL_Linux`, apt paketi `t3-gem-ardupilot`).
+---
 
-**Bu kurulum farklı**: ArduCopter'ı Linux'ta değil, doğrudan R5F'te, ChibiOS
-RTOS'unun üzerinde çalıştırıyor (özel bir AP_HAL backend: `AP_HAL_ChibiOS_K3`).
-Linux tarafındaki ArduCopter servisi kalıcı olarak kapatılır. Linux'un görevi
-artık sadece: R5F'i her açılışta bu firmware ile başlatmak, R5F'in ihtiyaç
-duyduğu donanım kaynaklarını (SPI0, PWM saatleri) açmak, ve R5F ile paylaşılan
-bellek üzerinden MAVLink/parametre trafiğini QGroundControl'e köprülemek.
+## 1) Bu proje ne, neden var
 
-Bu kurulumun QGroundControl'e tam, gerçek MAVLink (parametreler, kalibrasyon,
-arm/disarm, hepsi) ile bağlanabildiği ve gerçekten **uçtuğu** doğrulandı.
+T3 Gemstone O1 kartının içinde **iki farklı işlemci çekirdek ailesi** var,
+aynı çip üzerinde ama birbirinden bağımsız çalışıyorlar:
 
-## Bu depo neyi birleştiriyor
+- **A53 çekirdekleri**: normal, güçlü çekirdekler. Üzerlerinde tam bir Linux
+  (Ubuntu) çalışır. SSH ile bağlandığınızda girdiğiniz yer burası.
+- **MCU domain Cortex-R5F ("R5F")**: çok daha küçük, ayrı bir gömülü çekirdek.
+  Kendi başına RAM'i, kendi başına çalışma mantığı var. Linux, `remoteproc`
+  adlı bir mekanizmayla bu çekirdeğe bir program (`.elf` dosyası) yükleyip
+  başlatabiliyor — tıpkı bir Arduino'ya program yüklemek gibi ama kartın
+  kendi içinde, ayrı bir "bilgisayarcık" olarak.
 
-Aslen ayrı iki depo olan şu ikisi, orijinal (2026-08-18, uçan) kaynak
-hâliyle burada tek repo olarak birleştirildi:
+**Kartın fabrika/varsayılan hali:** R5F'te işe yaramaz bir "echo" test
+programı boşta duruyor, gerçek uçuş kontrolü A53 tarafında, Linux üzerinde
+çalışan ArduCopter yapıyor (`t3-gem-ardupilot` apt paketi).
 
-- **ArduPilot fork** — [emirhan-sonmez/ardupilot](https://github.com/emirhan-sonmez/ardupilot),
-  dal `gemstone-o1-r5f-hal`. Bu deponun kökü. Gerçek ArduCopter uygulaması +
-  R5F için yazılmış özel HAL backend: [libraries/AP_HAL_ChibiOS_K3/](libraries/AP_HAL_ChibiOS_K3/).
-- **ChibiOS portu** — [emirhan-sonmez/ChibiOS-Gemstone-O1-Port](https://github.com/emirhan-sonmez/ChibiOS-Gemstone-O1-Port),
-  dal `gemstone-o1-r5f`. Yukarıdakinin derleme bağımlılığı; burada
-  [modules/ChibiOS-Gemstone-O1-Port/](modules/ChibiOS-Gemstone-O1-Port/) altında.
+**Bu kurulumun yaptığı:** ArduCopter'ı Linux'tan R5F'e taşımak. Yani artık
+uçuş kontrolü Linux'ta değil, doğrudan o küçük R5F çekirdeğinde, ChibiOS
+denen bir RTOS (gerçek-zamanlı işletim sistemi — normal Linux'tan çok daha
+basit, öngörülebilir zamanlamalı, gömülü sistemler için tasarlanmış bir
+işletim sistemi) üzerinde çalışıyor. Linux'un görevi bu noktadan sonra sadece:
 
-`deploy/` altında ayrıca karta ve host makineye kurulan, kaynak
-depolarının hiçbirinde bulunmayan parçalar var: board-native parametre
-depolama daemon'u, host↔R5F arası paylaşımlı bellek üzerinden MAVLink
-köprüsü, ve 4 systemd servis dosyası.
+- Açılışta R5F'e doğru programı yüklemek,
+- R5F'in ihtiyaç duyduğu donanım yollarını (SPI, PWM) ona bırakmak,
+- R5F ile Linux arasında paylaşılan bir bellek bölgesi üzerinden MAVLink
+  (yer kontrol istasyonu haberleşme protokolü) trafiğini
+  QGroundControl'e (bir "GCS" — Ground Control Station, yer kontrol
+  istasyonu yazılımı) köprülemek.
 
-## Gereksinimler (host / geliştirme makinesi)
+**Bu neden yapılıyor?** R5F, Linux'a göre çok daha az gecikmeli/daha
+öngörülebilir zamanlama sunar (gerçek-zamanlı = "her döngü tam olarak ne
+zaman çalışacağı garanti edilebilir" demek) — uçuş kontrolü gibi zamanlamaya
+duyarlı işler için ilgi çekici bir alternatif. Bu, T3 ekibinden bağımsız bir
+geliştiricinin yaptığı, henüz resmi olarak T3'e katılmamış
+bir deneysel çalışma.
 
-- `arm-none-eabi-gcc` (10-2020-q4-major ile derlendi/test edildi)
-- `python3`, `python3-pip`
-- `empy` (`pip install empy==3.3.4`, ya da `python3 -c "import em"` ile zaten
-  var mı kontrol edin — paket `em` olarak import edilir)
-- `git`, `make`
+---
 
-## Derleme
+## 2) Kavramlar sözlüğü (önce bunu okuyun)
 
+| Terim | Ne demek |
+|---|---|
+| **ArduPilot / ArduCopter** | Açık kaynak bir otopilot yazılımı ailesi. ArduCopter, onun multikopter (drone) sürümü. Roll/pitch/yaw stabilizasyonu, GPS pozisyon tutma, arm/disarm güvenlik mantığı gibi her şeyi içerir. |
+| **HAL (Hardware Abstraction Layer)** | ArduPilot'un donanımla konuşan katmanı. Aynı ArduCopter kodu, farklı HAL'lar sayesinde farklı donanımlarda (Linux, ChibiOS, vs.) çalışabilir. Bu depodaki özel HAL'ın adı `AP_HAL_ChibiOS_K3`. |
+| **RTOS** | Real-Time Operating System — gerçek zamanlı işletim sistemi. Linux gibi "genel amaçlı" değil, "bu görev tam olarak şu kadar sürede bitecek" garantisi verebilen, küçük/gömülü sistemler için işletim sistemi. **ChibiOS** kullanılan RTOS'un adı. |
+| **R5F / MCU domain** | Kartın üzerindeki, Linux'un çalıştığı ana çekirdeklerden (A53) tamamen ayrı, küçük bir ARM Cortex-R5F çekirdeği. Bu depo, ArduCopter'ı burada çalıştırıyor. |
+| **remoteproc** | Linux çekirdeğinin bir alt sistemi — Linux'un, kendi yanındaki başka bir çekirdeğe (bizim durumumuzda R5F) bir program (.elf) yükleyip başlatmasını/durdurmasını sağlar. `/sys/class/remoteproc/remoteproc2/` altındaki dosyalarla kontrol edilir. |
+| **ELF** | Derlenmiş bir programın dosya biçimi (`.elf` uzantılı). Burada "R5F'e yüklenecek program dosyası" anlamında kullanılıyor. |
+| **SPI** | Sensörlerle (bu kartta IMU — ivme/gyro sensörü) haberleşmek için kullanılan bir donanım veri yolu (bus). |
+| **PWM** | Motorlara/ESC'lere (motor sürücü) hız komutu göndermek için kullanılan sinyal türü. |
+| **systemd servisi** | Linux'un açılışta otomatik başlattığı arka plan programı/görevi. `.service` uzantılı dosyalarla tanımlanır. Bu depoda hem kartın kendi Linux'unda hem host bilgisayarda birkaç tane kuruluyor. |
+| **MAVLink** | Drone ile yer kontrol istasyonu (QGroundControl gibi) arasındaki standart haberleşme protokolü/mesaj formatı. |
+| **QGroundControl (QGC)** | Bilgisayarınızda çalışan, drone'a bağlanıp telemetri gösteren, parametre ayarlayan, arm/disarm yapabildiğiniz yer kontrol istasyonu yazılımı. |
+| **waf** | ArduPilot'un kullandığı derleme (build) aracı — `make`'e benzer bir şey, `python3 waf <komut>` şeklinde çalıştırılır. |
+| **arm-none-eabi-gcc** | R5F gibi bir ARM gömülü çekirdek için kod üreten bir derleyici (cross-compiler — host bilgisayarınız muhtemelen x86_64 ama R5F ARM, bu yüzden "çapraz derleme" gerekir). |
+| **Host (bilgisayar)** | Sizin oturduğunuz, kodu derlediğiniz normal bilgisayarınız. Karttan (T3 Gemstone O1) ayrı bir şey. |
+| **Kart / board** | T3 Gemstone O1 — üzerinde hem Linux (A53) hem R5F çalışan fiziksel donanım. |
+| **arm / disarm** | Bir drone'un motorlarının dönmeye hazır hale getirilmesi (arm) / güvenli, motorların dönemeyeceği hale getirilmesi (disarm). Uçmadan önce arm edilmesi gerekir. |
+
+---
+
+## 3) GÜVENLİK UYARISI (önce okuyun)
+
+- **Pervaneleri (propeller) çıkarmadan hiçbir arm/motor testi yapmayın.**
+  Bu firmware'de arm olduğunda motorlar gerçekten dönebilir.
+- Bu kurulumda **GPS çalışmıyor** (bkz. [Bölüm 12](#12-bilinen-kısıtlamalar)) —
+  yani Auto/Guided/RTL/PosHold gibi GPS gerektiren modlar **yoktur**. Sadece
+  Stabilize/Acro gibi GPS'siz modlar kullanılabilir. RTL (eve dön) gibi bir
+  "kurtarma" modu olmadığını bilerek test edin.
+- Batarya voltaj/akım telemetrisi yok — bataryanın ne durumda olduğunu
+  yazılım size söylemez, gözle/elle takip edin.
+- İlk defa deploy ederken/test ederken kart bir tezgahta, pervanesiz,
+  sabitlenmiş halde olmalı.
+
+---
+
+## 4) Gerekli donanım
+
+- Bir **T3 Gemstone O1** kartı (üzerinde T3'ün resmi işletim sistemi kurulu
+  ve çalışır halde — kartı sıfırdan görüntü yazmak/imajlamak farklı bir
+  konu, `gem-imager` reposuna bakın).
+- Kart ile host bilgisayarı bağlayan bir **USB-C kablo** (kartın
+  USB-Ethernet debug bağlantısı için).
+- Bir **host bilgisayar** (Linux/Ubuntu önerilir — bu doküman Ubuntu
+  varsayıyor).
+- (Gerçek uçuş denemesi için) motorlar takılıyken **pervaneler çıkarılmış**
+  olmalı, ilk testler için.
+
+---
+
+## 5) Host bilgisayarda yazılım kurulumu
+
+Aşağıdakileri host bilgisayarınıza (karta değil!) kurun:
+
+```sh
+sudo apt update
+sudo apt install -y git make python3 python3-pip sshpass ssh gcc-arm-none-eabi
+pip3 install empy==3.3.4
 ```
+
+Neden bunlar:
+- `git` — depoyu indirmek için.
+- `make`, `gcc-arm-none-eabi` (`arm-none-eabi-gcc` komutunu sağlar) — R5F
+  için kod derlemek için gereken çapraz derleyici.
+- `python3`, `python3-pip` — ArduPilot'un `waf` derleme sistemi Python
+  tabanlı.
+- `empy` — waf'ın derleme sırasında kullandığı bir şablon (template) kütüphanesi.
+  `pip install empy==3.3.4` ile kurulmalı; sürüm önemli, farklı bir sürüm
+  derleme hatası verebilir.
+- `sshpass` — kart parolasını komutlara otomatik geçmek için (aşağıdaki tüm
+  `ssh`/`scp` komutları bunu kullanıyor, her seferinde elle parola
+  yazmamak için).
+
+Kurulumun doğru olduğunu kontrol edin:
+
+```sh
+arm-none-eabi-gcc --version
+python3 -c "import em; print('empy OK')"
+```
+
+İkisi de hatasız bir şey yazdırmalı.
+
+---
+
+## 6) Depoyu edinme
+
+Bu depo `~/gem-imager/chibios` altında zaten mevcutsa (bu makinede
+çalışıyorsanız) doğrudan oraya gidip devam edebilirsiniz:
+
+```sh
+cd ~/gem-imager/chibios
+```
+
+Başka bir makinede sıfırdan kuruyorsanız, bu depoyu (kendi GitHub'ınıza
+push ettiyseniz oradan, yoksa bu makineden kopyalayarak) edinin ve o
+klasöre girin. Depo, aslen ayrı iki proje olan şu ikisini zaten içinde
+barındırıyor (siz ayrıca klonlamanıza gerek yok):
+
+- **ArduPilot** (bu deponun kökü) — [emirhan-sonmez/ardupilot](https://github.com/emirhan-sonmez/ardupilot),
+  dal `gemstone-o1-r5f-hal`. Gerçek ArduCopter kodu + R5F'e özel HAL:
+  [libraries/AP_HAL_ChibiOS_K3/](libraries/AP_HAL_ChibiOS_K3/).
+- **ChibiOS portu** — [emirhan-sonmez/ChibiOS-Gemstone-O1-Port](https://github.com/emirhan-sonmez/ChibiOS-Gemstone-O1-Port),
+  dal `gemstone-o1-r5f`, [modules/ChibiOS-Gemstone-O1-Port/](modules/ChibiOS-Gemstone-O1-Port/)
+  altında — yukarıdakinin derleme zamanı bağımlılığı.
+
+`deploy/` klasörü altında ayrıca, yukarıdaki iki kaynak depoda de
+bulunmayan, bu proje için özel yazılmış parçalar var: kart üzerinde
+çalışan bir parametre kaydetme programı, host↔kart arası MAVLink köprüsü,
+ve gerekli systemd servis tanımları. Bunlara ilerleyen bölümlerde
+değinilecek.
+
+---
+
+## 7) Derleme
+
+Depo klasöründeyken (`~/gem-imager/chibios`):
+
+```sh
 python3 waf configure --board GemstoneO1R5F
 python3 waf copter
 ```
 
-`GEMSTONE_CHIBIOS_ROOT` env var'ı ayarlamaya gerek yok — varsayılan olarak
-depo içindeki `modules/ChibiOS-Gemstone-O1-Port/` kullanılır (bkz.
-[Tools/ardupilotwaf/chibios_k3.py](Tools/ardupilotwaf/chibios_k3.py)).
-Farklı bir ChibiOS portu denemek isterseniz env var ile override edebilirsiniz.
+Ne oluyor: ilk komut derleme ayarlarını R5F/ChibiOS hedefine göre
+yapılandırıyor (ChibiOS portunun konumunu otomatik buluyor, siz bir şey
+ayarlamanıza gerek yok). İkinci komut asıl derlemeyi yapıp ArduCopter'ı
+üretiyor.
 
-Çıktı: `build/GemstoneO1R5F/bin/arducopter` (ELF, remoteproc uyumlu —
-`.resource_table@0xA1100000`, `.trace@0xA1110000` 16K, `.ipc@0xA1120000` 64K
-bölümleri içerir).
+**İlk çalıştırmada internet gerekir** — waf kendi alt bileşenini
+(`modules/waf`) otomatik indirmeye çalışır. "Tekrar çalıştırın" gibi bir
+mesaj görürseniz komutu tekrar çalıştırmanız yeterli.
 
-İlk `waf configure` waf'ın kendi `modules/waf` submodule'ünü otomatik çekmeye
-çalışır, internet gerekir; "tekrar çalıştırın" derse tekrar çalıştırın.
+Başarılı bir derleme sonunda şu dosya oluşur:
 
-## Karta ilk deploy ve kalıcı hâle getirme
+```
+build/GemstoneO1R5F/bin/arducopter
+```
 
-Kart bilgileri: `gemstone@192.168.7.2` (USB-Ethernet debug linki), şifre
-`gem`, sudo şifresi de `gem` (T3'ün resmi imajının varsayılanı).
+Bu, R5F'e yükleyeceğiniz asıl program dosyasıdır (bir ELF dosyası).
 
-### 1) Tek seferlik deploy ile test (henüz kalıcı değil)
+---
+
+## 8) Karta ilk deploy (test amaçlı, kalıcı değil)
+
+Kart bilgileri (hepsi T3'ün resmi imajının varsayılanı):
+
+- Adres: `192.168.7.2` (USB-Ethernet debug kablosu üzerinden)
+- Kullanıcı: `gemstone`
+- SSH parolası: `gem`
+- sudo parolası: `gem`
+
+Kartı USB-C kablo ile host bilgisayara bağlayın, kartın açık olduğundan
+emin olun, sonra host'ta:
 
 ```sh
 sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
@@ -91,38 +233,68 @@ sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'echo ap-k3.el
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'echo start > /sys/class/remoteproc/remoteproc2/state'"
 ```
 
-**Önemli kısıtlama**: `"stop"` komutu sadece R5F o an TI'ın stok firmware'ini
-çalıştırıyorsa düzgün çalışır. Kendi (ChibiOS) firmware'imiz remoteproc'un
-`"stop"` için beklediği mailbox el sıkışmasını implement etmiyor — bu yüzden
-**her firmware değişikliğinden önce tam reboot atmak şart** (yukarıdaki
-sırayla değil; önce `sudo reboot`, SSH geri gelince yukarıdaki adımlar).
+Satır satır ne yapıyor:
+1. Derlenen dosyayı karta kopyalar (`scp`).
+2. Linux/A53 tarafındaki eski ArduCopter servisini durdurur (artık R5F
+   devralacak).
+3. IMU sensörünün bağlı olduğu SPI yolunu Linux'un elinden alıp R5F'e
+   serbest bırakır (ikisi aynı anda kullanamaz).
+4. Dosyayı, remoteproc'un beklediği konuma (`/lib/firmware/`) kopyalar.
+5-7. remoteproc'a "durdur, şu yeni dosyayı yükle, başlat" der.
 
-Trace'i izlemek için:
+**ÖNEMLİ KISITLAMA — mutlaka okuyun:** 5. adımdaki `"stop"` komutu **sadece
+R5F o an TI'nın fabrika/stok firmware'ini çalıştırıyorsa** düzgün çalışır.
+Bizim kendi (ChibiOS/ArduCopter) firmware'imiz, remoteproc'un "durdur"
+komutu için beklediği özel bir el sıkışma sinyalini (mailbox) henüz
+implement etmiyor. Yani **R5F zaten bizim firmware'imizi çalıştırıyorsa,
+yukarıdaki sıralamayla yeni bir sürüm YÜKLEYEMEZSİNİZ** — önce kartı
+**tamamen reboot etmeniz** gerekir:
+
+```sh
+sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S reboot"
+```
+
+birkaç saniye bekleyip SSH'in geri geldiğini doğrulayın (`ping 192.168.7.2`
+veya tekrar tekrar `ssh` deneyin), sonra yukarıdaki 7 komutu çalıştırın.
+**Yani her kod değişikliğinde döngü şu: reboot → yukarıdaki 7 komut.**
+
+Programın kart üzerinde ne yazdırdığını görmek için:
 
 ```sh
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cat /sys/kernel/debug/remoteproc/remoteproc2/trace0"
 ```
 
-### 2) Kalıcı hâle getirme (her reboot'ta otomatik bu firmware gelsin)
+Bu, programın kendi tanılama/debug çıktısıdır (`trace0`). **16 KB ile
+sınırlı ve dairesel değildir** — dolunca yeni yazma durur, yani çok uzun
+süre çalışan bir programın çok eski çıktılarını burada göremezsiniz.
+
+---
+
+## 9) Kalıcı hale getirme
+
+Yukarıdaki bölüm, her reboot'ta kaybolan **geçici** bir test. Kartın **her
+açılışında otomatik olarak** bu firmware ile gelmesi için:
 
 ```sh
-# a) Orijinal stok firmware'i yedekleyin (yoksa)
+# a) Orijinal fabrika firmware'ini yedekleyin (daha önce yedeklenmediyse)
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'test -f /lib/firmware/j722s-mcu-r5f0_0-fw.bak || cp /lib/firmware/j722s-mcu-r5f0_0-fw /lib/firmware/j722s-mcu-r5f0_0-fw.bak'"
 
-# b) Kendi elf'inizi varsayılan firmware dosyasının üzerine yazın
+# b) Kendi dosyanızı, remoteproc'un OTOMATİK yüklediği varsayılan dosyanın üzerine yazın
 sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /tmp/ap-k3.elf /lib/firmware/j722s-mcu-r5f0_0-fw"
 
-# c) ArduCopter/Linux servisini kalıcı olarak kapatın
+# c) Linux tarafındaki eski ArduCopter servisini KALICI olarak kapatın
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl disable --now arducopter"
+```
 
-# d) deploy/systemd-board/ altındaki 3 servisi kurun (aşağıya bakın)
+Sonra [Bölüm 9.1](#91-3-adet-kart-üzerinde-çalışan-systemd-servisi)'deki 3
+servisi kurun, ardından reboot atıp doğrulayın:
 
-# e) reboot atıp doğrulayın
+```sh
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S reboot"
 ```
 
-**Geri alma** (ArduCopter/Linux'u tekrar varsayılan yapmak için):
+**Geri alma** (her şeyi eski haline, Linux/ArduCopter'a döndürmek için):
 
 ```sh
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /lib/firmware/j722s-mcu-r5f0_0-fw.bak /lib/firmware/j722s-mcu-r5f0_0-fw"
@@ -131,29 +303,30 @@ sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl enable ard
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S reboot"
 ```
 
-## Kartta gerekli 3 systemd servisi
+### 9.1) 3 adet kart üzerinde çalışan systemd servisi
 
-Üçü de kartın kendi Linux'unda çalışır (host'ta değil), boot'un çok erken
-aşamasında (`sysinit.target`), R5F'in ihtiyaçlarını R5F daha kendi init'ini
-bitirmeden hazır hâle getirmek için. Tanımları [deploy/systemd-board/](deploy/systemd-board/) altında:
+Bunların üçü de **kartın kendi Linux'unda** çalışır (host bilgisayarda
+değil), açılışın çok erken bir aşamasında (`sysinit.target` — normal
+servislerden bile önce), R5F kendi başlatma işlemini bitirmeden önce onun
+ihtiyaç duyacağı şeyleri hazırlamak için. Tanımları
+[deploy/systemd-board/](deploy/systemd-board/) altında:
 
-- **`chibios-spi-release.service`** — SPI0'ı (`4b00000.spi`) Linux'tan R5F'e
-  serbest bırakır. IMU (ICM-20948) SPI0 üzerinde; Linux'un `omap2_mcspi`
-  sürücüsü aynı anda bağlıysa transferler çakışır.
-- **`chibios-pwm-clocks.service`** — EHRPWM0/EHRPWM1 saatlerini açar. **Çok
-  önemli**, unutulursa "arm oldu ama motorlar dönmüyor" olur — bu saatleri
-  normalde Linux'taki `arducopter.service` kendi PWM çıktısı için açardı (yan
-  etki olarak); onu kapattığımız için başka hiçbir şey bu saatleri açmıyor.
-- **`gem-storaged.service`** — [deploy/board/gem_storaged.py](deploy/board/gem_storaged.py)'yi
-  çalıştırır: `AP_HAL_ChibiOS_K3`'ün parametreleri yazdığı paylaşımlı
-  bellekteki 16 KiB'lik alanı gerçek diske kalıcı yazar. **Board-native olmak
-  zorunda** (SSH ile değil) — SSH ile tetiklenen bir sürüm, reboot sonrası
-  ağın hazır olmasıyla ArduCopter'ın 60 saniyelik bekleme penceresi arasında
-  yarış durumuna girip bir kalibrasyonu kalıcı olarak silmişti; board-native
-  olması bu riski tamamen ortadan kaldırır. `gem_storaged.py`'nin kendisi
-  karta ayrıca kopyalanmalı: `/home/gemstone/gem_storaged.py`.
+| Servis | Ne işe yarar | Neden gerekli |
+|---|---|---|
+| `chibios-spi-release.service` | SPI0 yolunu Linux'tan alıp R5F'e serbest bırakır | IMU sensörü SPI0 üzerinde; ikisi aynı anda erişirse çakışır |
+| `chibios-pwm-clocks.service` | Motor PWM saat sinyallerini açar | **Çok kritik.** Bu olmadan arm işlemi başarılı görünür ama motorlar dönmez — bu saatleri normalde Linux'taki eski ArduCopter servisi kendiliğinden açardı, o kapatıldığı için artık hiçbir şey açmıyor |
+| `gem-storaged.service` | Parametre/kalibrasyon verisini kalıcı diske yazar | R5F'in yazdığı ayarlar (RC kalibrasyonu, PID'ler, vb.) normalde uçtuğu paylaşımlı bellek reboot'ta silinir; bu servis onları gerçek diske kaydeder |
 
-Kurmak için (her biri için):
+**`gem-storaged` neden SSH ile değil, kartın kendi içinde çalışmalı:** Bir
+ara SSH üzerinden host'tan tetiklenen bir sürümü denendi, ama reboot
+sonrası ağın hazır olma süresi ile ArduCopter'ın kendi 60 saniyelik
+bekleme penceresi arasında bir yarış durumu (race condition) oluştu ve
+**gerçek bir kalibrasyon verisi boş bir imajla üzerine yazılıp kalıcı
+olarak silindi.** Board-native (kartın kendi içinde, ağdan bağımsız)
+çalışması bu riski tamamen ortadan kaldırıyor — bu yüzden mutlaka bu
+şekilde kurulmalı.
+
+Her birini kurmak için (`<dosya>` yerine servis adını yazın):
 
 ```sh
 sshpass -p gem scp deploy/systemd-board/<dosya>.service gemstone@192.168.7.2:/tmp/<dosya>.service
@@ -162,108 +335,163 @@ sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl daemon-rel
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl enable --now <dosya>.service"
 ```
 
-`gem_storaged.py`'yi ayrıca kopyalayın:
+`gem_storaged.service`'in çalıştırdığı Python betiğini de ayrıca kopyalamanız
+gerekiyor:
 
 ```sh
 sshpass -p gem scp deploy/board/gem_storaged.py gemstone@192.168.7.2:/tmp/gem_storaged.py
 sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /tmp/gem_storaged.py /home/gemstone/gem_storaged.py"
 ```
 
-## MAVLink → QGroundControl köprüsü (host tarafı)
+---
 
-R5F'teki ArduCopter, gerçek MAVLink'i fiziksel bir pime değil, paylaşımlı
-bellekteki iki yönlü bir "ring buffer"a yazar/okur (wire contract:
-[libraries/AP_HAL_ChibiOS_K3/hwdef/boot/ipc_ring.h](libraries/AP_HAL_ChibiOS_K3/hwdef/boot/ipc_ring.h)).
-Adres: `0xA1120000` (64 KiB), R5F→Host veri `0x1000` ofsetinde (8 KiB),
-Host→R5F veri `0x3000` ofsetinde (8 KiB).
+## 10) QGroundControl bağlantısı
 
-Bunu QGroundControl'e (UDP 14550) köprülemek için host'ta iki script çalışır
+R5F üzerindeki ArduCopter, MAVLink verisini fiziksel bir kabloya değil,
+Linux ile paylaştığı bir bellek bölgesine (adres `0xA1120000`, 64 KiB)
+yazıp okuyor — buna "ring buffer" (dairesel tampon) deniyor. Bu veriyi
+QGroundControl'ün anlayacağı normal bir ağ bağlantısına (UDP 14550)
+çevirmek için host bilgisayarınızda iki Python betiği çalışır
 ([deploy/host/](deploy/host/)):
 
-- **`gem_mavbridge.py`** — kartta çalışır (host'tan SSH ile başlatılır),
-  `/dev/mem` üzerinden mmap ile ring'i okur/yazar, stdin/stdout üzerinden
-  host'a ham byte akışı verir.
-- **`run_bridge.py`** — host'ta çalışır, SSH ile `gem_mavbridge.py`'yi
-  başlatır, stdout'unu UDP 14550'ye, QGC'den gelen UDP'yi de stdin'e
-  yönlendirir. Bağlantı koparsa (reboot vs.) otomatik yeniden dener.
+- `gem_mavbridge.py` — kartın üzerinde çalışır (host'tan SSH ile
+  başlatılır), o paylaşımlı belleği okuyup/yazıp host'a aktarır.
+- `run_bridge.py` — host bilgisayarınızda çalışır, SSH üzerinden yukarıdaki
+  betiği başlatır, gelen veriyi QGroundControl'ün dinlediği UDP 14550
+  portuna yönlendirir. Bağlantı koparsa (örn. kart reboot olduysa)
+  otomatik olarak yeniden dener.
 
-Host'ta `systemd --user` servisi olarak kurulur
-([deploy/systemd-host/gem-mavbridge.service](deploy/systemd-host/gem-mavbridge.service) —
-`ExecStart` yolunu kendi `run_bridge.py` konumunuza göre düzenleyin):
+Host bilgisayarınızda arka planda sürekli çalışması için bir kullanıcı
+systemd servisi olarak kurulur:
 
 ```sh
 mkdir -p ~/.config/systemd/user
 cp deploy/systemd-host/gem-mavbridge.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now gem-mavbridge
-loginctl enable-linger "$USER"   # oturum kapansa da servis çalışmaya devam etsin
+loginctl enable-linger "$USER"
 ```
 
-**`/dev/mem` hizalama kuralı**: bu board'da `/dev/mem` üzerinden bu
-"reserved" bellek bölgelerine erişirken her okuma/yazmanın başlangıcı VE
-bitişi 8 byte'a hizalı olmak zorunda, yoksa gerçek bir SIGBUS ile process
-çöküyor (glibc'nin `memcpy`'si sınırda örtüşen bir kuyruk yüklemesi yapıyor,
-Device-tipi bellekte bu gerçek donanım hatasına yol açıyor). `gem_mavbridge.py`
-ve `gem_storaged.py`'deki `read_aligned()`/`write_aligned()` bunu hallediyor —
-bu board'da `/dev/mem` ile yapılacak her işte bu kurala uyulmalı.
+(`deploy/systemd-host/gem-mavbridge.service` içindeki `ExecStart` satırının
+`run_bridge.py` dosyanızın gerçek konumuna işaret ettiğinden emin olun.)
 
-## Doğrulama
+`loginctl enable-linger` komutu, siz oturumu kapatsanız bile bu servisin
+arka planda çalışmaya devam etmesini sağlar.
+
+Kurulum bittikten sonra QGroundControl'ü açmanız yeterli — herhangi bir
+özel ayar yapmadan otomatik olarak UDP 14550'yi dinler ve bağlanır.
+"Not Ready" yazısı ve ArduPilot logosu görürseniz bağlantı başarılıdır.
+
+---
+
+## 11) Doğrulama listesi
+
+Her şeyin doğru kurulduğunu teyit etmek için:
 
 ```sh
 # R5F kendi firmware'ini otomatik yüklüyor mu:
 sshpass -p gem ssh gemstone@192.168.7.2 "cat /sys/class/remoteproc/remoteproc2/state /sys/class/remoteproc/remoteproc2/firmware"
-# -> "running" ve "j722s-mcu-r5f0_0-fw"
+# -> "running" ve "j722s-mcu-r5f0_0-fw" yazmalı
 
-# arducopter/Linux gerçekten kapalı mı:
+# Linux tarafındaki eski ArduCopter gerçekten kapalı mı:
 sshpass -p gem ssh gemstone@192.168.7.2 "systemctl is-active arducopter; systemctl is-enabled arducopter"
-# -> inactive / disabled
+# -> inactive / disabled yazmalı
 
-# 3 board-native servis çalışıyor mu:
+# 3 kart-üzeri servis çalışıyor mu:
 sshpass -p gem ssh gemstone@192.168.7.2 "systemctl is-active chibios-spi-release chibios-pwm-clocks gem-storaged"
+# -> üçü de "active" yazmalı
 
 # Host'taki köprü servisi çalışıyor mu:
 systemctl --user is-active gem-mavbridge
+# -> "active" yazmalı
 
-# QGroundControl'ü açın (UDP 14550'yi dinler, özel ayar gerekmez) —
-# "Not Ready" / "Stabilize" + ArduPilot logosu görünmeli.
+# QGroundControl'ü açın — "Not Ready" / "Stabilize" + ArduPilot logosu görünmeli
 ```
 
-## Bilinen kısıtlamalar (2026-08-18 itibarıyla)
+---
 
-- **GPS çalışmıyor.** Linux/ArduCopter kurulumunda GPS `UART-MAIN6` (Main
-  domain UART, `/dev/ttyS6`/`SERIAL3`) üzerinden geliyordu. R5F, MCU
-  domain'de — bu UART'a fiziksel olarak erişemiyor; `AP_HAL_ChibiOS_K3`'te
-  `serial1`-`serial9` hepsi boş/sahte sürücü. GPS gerektiren modlar (Auto,
-  Guided, RTL, PosHold) kullanılamaz, sadece Stabilize/Acro gibi GPS'siz
-  modlar mümkün.
-- **IMU 100Hz'e sabit** → `SCHED_LOOP_RATE=50` şart. `AP_InertialSensor_ICM20948_K3.cpp`'de
-  IMU okuma hızı bilinçli olarak 100Hz'e sabitlenmiş (daha hızlı bir 14-byte
-  block-read yöntemi her eksenin yüksek byte'inda 1 bit sessizce bozuk veri
-  döndürüyordu). ArduCopter'ın varsayılan 400Hz döngü hızını karşılayamıyor,
-  "Main loop slow"/"Gyro rate" prearm hatalarına yol açıyor. `SCHED_LOOP_RATE`
-  parametresini MAVLink `PARAM_SET` ile `50` yapın (reboot gerekir).
-- **`ARMING_CHECK` parametresi yok**, QGC "Missing params" uyarısı veriyor —
-  bug değil, ArduPilot'un kendi kaynağında çok yeni bir isim değişikliği
-  (`ARMING_CHECK` → ters mantıklı `ARMING_SKIPCHK`); QGC'nin dahili listesi
-  henüz güncel değil. Zararsız, arm/uçuşu engellemiyor.
-- **Her firmware değişikliğinde tam reboot şart** — `am67_mailbox.h` zaten
-  var ama build `mailbox_init()` çağırmıyor; `RP_MBOX_SHUTDOWN`'a cevap
-  verilse `"stop"` sorunsuz çalışır, reboot'a gerek kalmazdı (ileride
-  düzeltilebilir).
-- **`trace0` debugfs sınırlı** — 16 KiB, dairesel değil; büyük miktarda veri
-  için değil, sadece insan-okur tanısal loglama için kullanışlı.
+## 12) Bilinen kısıtlamalar
 
-## Depo yapısı
+Bunlar 2026-08-18'deki doğrulanmış uçuş anındaki gerçek durumdur — birer
+"bug" değil, bu deneysel kurulumun şu anki gerçek sınırları:
+
+- **GPS çalışmıyor.** Normal Linux/ArduCopter kurulumunda GPS,
+  `UART-MAIN6` adlı, Linux/A53 tarafının erişebildiği bir seri porta
+  bağlıydı. R5F bu porta fiziksel olarak erişemiyor (araştırma devam
+  ediyor, bkz. [Bölüm 13](#13-sorun-giderme)'teki not). Sonuç: GPS
+  gerektiren tüm modlar (Auto, Guided, RTL, PosHold) **kullanılamaz** —
+  sadece Stabilize/Acro gibi GPS'siz modlar çalışır.
+- **IMU okuma hızı 100Hz'e sabit.** Daha hızlı bir okuma yöntemi
+  denenmişti ama sessizce hatalı veri üretiyordu (her eksende 1 bit
+  bozuluyordu), bu yüzden bilinçli olarak yavaş ama güvenilir yönteme
+  geri dönüldü. Sonuç: ArduCopter'ın standart 400Hz döngü hızı
+  desteklenmiyor, `SCHED_LOOP_RATE` parametresini QGroundControl'den
+  (ya da MAVLink üzerinden) **`50`** yapmanız gerekiyor, yoksa "Main loop
+  slow" / "Gyro rate" hatası alıp arm edemezsiniz.
+- **`ARMING_CHECK` parametresi "eksik" görünüyor**, QGC bir uyarı
+  gösteriyor — zararsız bir kozmetik sorun (ArduPilot'un kendisi bu
+  parametrenin adını yakın zamanda değiştirdi, QGC'nin dahili listesi
+  henüz güncellenmedi). Arm'ı veya uçuşu engellemiyor, görmezden
+  gelebilirsiniz.
+- **Her firmware değişikliğinde tam reboot şart** (bkz. Bölüm 8) — ileride
+  düzeltilebilir bir eksiklik, henüz düzeltilmedi.
+- **`trace0` debug çıktısı sınırlı** — 16 KB, dairesel değil. Uzun süre
+  çalışan bir programın eski çıktılarını göremezsiniz, sadece anlık
+  tanılama için kullanışlı.
+- **Batarya voltaj/akım telemetrisi yok** — donanımsal olarak bu kartta
+  böyle bir ölçüm devresi tanımlı değil.
+
+---
+
+## 13) Sorun giderme
+
+**"can't stop rproc: -16" veya "module-reset assert failed, ret=-19" hatası
+alıyorum:** R5F şu an kendi (ChibiOS) firmware'imizi çalıştırıyor ve bu
+firmware "durdur" komutuna düzgün cevap vermiyor. Çözüm: kartı tam reboot
+edin, SSH geri geldikten sonra deploy adımlarını (Bölüm 8) baştan
+uygulayın. Kısayol yok, her seferinde reboot gerekiyor.
+
+**Arm oluyor ama motorlar hiç dönmüyor:** `chibios-pwm-clocks.service`
+kurulu ve çalışır durumda mı kontrol edin (Bölüm 9.1). Bu servis
+olmadan motor sürücü saatleri hiç açılmıyor.
+
+**QGroundControl bağlanmıyor:** Sırasıyla kontrol edin: (1) kart açık ve
+USB-C ile bağlı mı, (2) `systemctl --user is-active gem-mavbridge` "active"
+diyor mu, (3) R5F gerçekten çalışıyor mu (`remoteproc2/state` → "running").
+
+**Kalibrasyon/ayarlar reboot sonrası kayboluyor:** `gem-storaged.service`
+kurulu mu ve **board-native** mi (SSH ile değil, kartın kendi systemd'i
+üzerinden) çalıştığını doğrulayın — SSH ile tetiklenen bir sürüm bir kez
+gerçek veriyi silmişti (Bölüm 9.1'deki uyarıya bakın).
+
+**`/dev/mem` üzerinden bir şey okurken/yazarken "Bus error" ile program
+çöküyor:** Bu kartta, R5F ile paylaşılan bellek bölgelerine erişirken hem
+başlangıç hem bitiş adresinin 8 byte'a hizalı olması zorunlu — değilse
+gerçek bir donanım hatasıyla (SIGBUS) çöker. `deploy/`'daki Python
+betiklerindeki `read_aligned()`/`write_aligned()` fonksiyonları bunu zaten
+hallediyor; kendi ek bir betik yazarsanız aynı kurala uyun.
+
+**GPS'i çalıştırmayı denemek istiyorum:** Şu an araştırma aşamasında —
+GPS'in bağlı olduğu seri portun (`UART-MAIN6`) aynı IP ailesinden, R5F'in
+zaten başarıyla eriştiği başka bir port ile aynı donanım bölgesinde olduğu
+tespit edildi, yani "R5F oraya hiç erişemez" varsayımı kesin değil. Henüz
+gerçek donanımda doğrulanmadı. Bu konuda ilerlemek isterseniz projenin
+güncel durumunu takip eden kişiyle konuşun.
+
+---
+
+## 14) Depo yapısı
 
 ```
-.                          ArduPilot kaynağı (emirhan-sonmez/ardupilot @ gemstone-o1-r5f-hal)
+.                                  ArduPilot kaynağı (emirhan-sonmez/ardupilot @ gemstone-o1-r5f-hal)
 ├── libraries/AP_HAL_ChibiOS_K3/   R5F için özel HAL backend
 ├── modules/ChibiOS-Gemstone-O1-Port/   ChibiOS portu (emirhan-sonmez/ChibiOS-Gemstone-O1-Port @ gemstone-o1-r5f)
-└── deploy/                 Karta/host'a kurulan, hiçbir kaynak repoda olmayan parçalar
-    ├── board/gem_storaged.py
-    ├── host/gem_mavbridge.py, run_bridge.py
-    ├── systemd-board/       3 board-native servis
-    └── systemd-host/        host'taki systemd --user servisi
+└── deploy/                        Karta/host'a kurulan, hiçbir kaynak repoda olmayan parçalar
+    ├── board/gem_storaged.py      Kart üzerinde çalışan parametre kaydetme betiği
+    ├── host/gem_mavbridge.py, run_bridge.py   Host↔kart MAVLink köprüsü
+    ├── systemd-board/             3 kart-üzeri (board-native) servis tanımı
+    └── systemd-host/              Host'taki systemd --user servis tanımı
 ```
 
-Orijinal ArduPilot projesi hakkında: [README_ARDUPILOT.md](README_ARDUPILOT.md).
+Orijinal ArduPilot projesi hakkında genel bilgi için:
+[README_ARDUPILOT.md](README_ARDUPILOT.md).
