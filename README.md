@@ -464,7 +464,7 @@ systemctl --user is-active gem-mavbridge
 Bunlar 2026-08-18'deki doğrulanmış uçuş anındaki gerçek durumdur — birer
 "bug" değil, bu deneysel kurulumun şu anki gerçek sınırları:
 
-- **GPS şu an çalışmıyor — ama "asla çalışmaz" anlamına gelmiyor, henüz
+- **Chibos için GPS henüz
   test edilmedi.** Normal Linux/ArduCopter kurulumunda GPS `UART-MAIN6`
   adlı seri porta bağlı ve orada sorunsuz çalışıyor (bu portun kartın
   üzerinde tam olarak hangi pin olduğu T3'ün
