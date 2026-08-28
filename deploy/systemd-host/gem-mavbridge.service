@@ -1,0 +1,11 @@
+[Unit]
+Description=Gemstone O1 R5F MAVLink bridge (ipc ring -> UDP 14550 for QGroundControl)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/harun/gemstone-backups/run_bridge.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

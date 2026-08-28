@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE doc [
+  <!ENTITY hal_base_driver     SYSTEM "hal_base_driver.xml">
+  <!ENTITY hal_cb_driver       SYSTEM "hal_cb_driver.xml">
+  <!ENTITY hal_channels        SYSTEM "hal_channels.xml">
+  <!ENTITY hal_block_io        SYSTEM "hal_block_io.xml">
+  <!ENTITY hal_flash_interface SYSTEM "hal_flash_interface.xml">
+  <!ENTITY hal_flash_base      SYSTEM "hal_flash_base.xml">
+  <!ENTITY hal_efl             SYSTEM "hal_efl.xml">
+  <!ENTITY hal_adc             SYSTEM "hal_adc.xml">
+  <!ENTITY hal_can             SYSTEM "hal_can.xml">
+  <!ENTITY hal_dac             SYSTEM "hal_dac.xml">
+  <!ENTITY hal_eth             SYSTEM "hal_eth.xml">
+  <!ENTITY hal_gpt             SYSTEM "hal_gpt.xml">
+  <!ENTITY hal_i2c             SYSTEM "hal_i2c.xml">
+  <!ENTITY hal_i2s             SYSTEM "hal_i2s.xml">
+  <!ENTITY hal_icu             SYSTEM "hal_icu.xml">
+  <!ENTITY hal_pwm             SYSTEM "hal_pwm.xml">
+  <!ENTITY hal_rtc             SYSTEM "hal_rtc.xml">
+  <!ENTITY hal_sdc             SYSTEM "hal_sdc.xml">
+  <!ENTITY hal_sio             SYSTEM "hal_sio.xml">
+  <!ENTITY hal_spi             SYSTEM "hal_spi.xml">
+  <!ENTITY hal_usb             SYSTEM "hal_usb.xml">
+  <!ENTITY hal_usb_cdc         SYSTEM "hal_usb_cdc.xml">
+  <!ENTITY hal_trng            SYSTEM "hal_trng.xml">
+  <!ENTITY hal_wdg             SYSTEM "hal_wdg.xml">
+  <!ENTITY hal_wspi            SYSTEM "hal_wspi.xml">
+]>
+<instance xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.chibios.org/xml/schema/ccode/modules.xsd">
+  <paths>
+    <path>../../common/oop/codegen</path>
+  </paths>
+  <modules>
+    &hal_base_driver;
+    &hal_cb_driver;
+    &hal_channels;
+    &hal_block_io;
+    &hal_flash_interface;
+    &hal_flash_base;
+    &hal_efl;
+    &hal_adc;
+    &hal_can;
+    &hal_dac;
+    &hal_eth;
+    &hal_gpt;
+    &hal_i2c;
+    &hal_i2s;
+    &hal_icu;
+    &hal_pwm;
+    &hal_rtc;
+    &hal_sdc;
+    &hal_sio;
+    &hal_spi;
+    &hal_usb;
+    &hal_usb_cdc;
+    &hal_trng;
+    &hal_wdg;
+    &hal_wspi;
+  </modules>
+</instance>

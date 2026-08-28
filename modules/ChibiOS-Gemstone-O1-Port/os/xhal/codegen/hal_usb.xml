@@ -1,0 +1,2505 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.chibios.org/xml/schema/ccode/modules.xsd"
+  name="hal_usb" descr="USB Driver" check="HAL_USE_USB == TRUE"
+  editcode="false">
+  <brief>USB Driver macros and structures.</brief>
+  <imports>
+    <import>hal_base_driver.xml</import>
+  </imports>
+  <public>
+    <includes_always>
+      <include style="regular">hal_base_driver.h</include>
+    </includes_always>
+    <definitions_early>
+      <group description="Endpoint direction helpers">
+        <define name="USB_ENDPOINT_OUT" value="(ep)">
+          <brief>Builds an OUT endpoint address.</brief>
+        </define>
+        <define name="USB_ENDPOINT_IN" value="((ep) | 0x80U)">
+          <brief>Builds an IN endpoint address.</brief>
+        </define>
+      </group>
+      <group description="Request type encoding">
+        <define name="USB_RTYPE_DIR_MASK" value="0x80U" />
+        <define name="USB_RTYPE_DIR_HOST2DEV" value="0x00U" />
+        <define name="USB_RTYPE_DIR_DEV2HOST" value="0x80U" />
+        <define name="USB_RTYPE_TYPE_MASK" value="0x60U" />
+        <define name="USB_RTYPE_TYPE_STD" value="0x00U" />
+        <define name="USB_RTYPE_TYPE_CLASS" value="0x20U" />
+        <define name="USB_RTYPE_TYPE_VENDOR" value="0x40U" />
+        <define name="USB_RTYPE_TYPE_RESERVED" value="0x60U" />
+        <define name="USB_RTYPE_RECIPIENT_MASK" value="0x1FU" />
+        <define name="USB_RTYPE_RECIPIENT_DEVICE" value="0x00U" />
+        <define name="USB_RTYPE_RECIPIENT_INTERFACE" value="0x01U" />
+        <define name="USB_RTYPE_RECIPIENT_ENDPOINT" value="0x02U" />
+        <define name="USB_RTYPE_RECIPIENT_OTHER" value="0x03U" />
+      </group>
+      <group description="Standard requests">
+        <define name="USB_REQ_GET_STATUS" value="0U" />
+        <define name="USB_REQ_CLEAR_FEATURE" value="1U" />
+        <define name="USB_REQ_SET_FEATURE" value="3U" />
+        <define name="USB_REQ_SET_ADDRESS" value="5U" />
+        <define name="USB_REQ_GET_DESCRIPTOR" value="6U" />
+        <define name="USB_REQ_SET_DESCRIPTOR" value="7U" />
+        <define name="USB_REQ_GET_CONFIGURATION" value="8U" />
+        <define name="USB_REQ_SET_CONFIGURATION" value="9U" />
+        <define name="USB_REQ_GET_INTERFACE" value="10U" />
+        <define name="USB_REQ_SET_INTERFACE" value="11U" />
+        <define name="USB_REQ_SYNCH_FRAME" value="12U" />
+      </group>
+      <group description="Descriptor identifiers">
+        <define name="USB_DESCRIPTOR_DEVICE" value="1U" />
+        <define name="USB_DESCRIPTOR_CONFIGURATION" value="2U" />
+        <define name="USB_DESCRIPTOR_STRING" value="3U" />
+        <define name="USB_DESCRIPTOR_INTERFACE" value="4U" />
+        <define name="USB_DESCRIPTOR_ENDPOINT" value="5U" />
+        <define name="USB_DESCRIPTOR_DEVICE_QUALIFIER" value="6U" />
+        <define name="USB_DESCRIPTOR_OTHER_SPEED_CFG" value="7U" />
+        <define name="USB_DESCRIPTOR_INTERFACE_POWER" value="8U" />
+        <define name="USB_DESCRIPTOR_INTERFACE_ASSOCIATION" value="11U" />
+      </group>
+      <group description="Feature selectors">
+        <define name="USB_FEATURE_ENDPOINT_HALT" value="0U" />
+        <define name="USB_FEATURE_DEVICE_REMOTE_WAKEUP" value="1U" />
+        <define name="USB_FEATURE_TEST_MODE" value="2U" />
+      </group>
+      <group description="Device addressing modes">
+        <define name="USB_EARLY_SET_ADDRESS" value="0" />
+        <define name="USB_LATE_SET_ADDRESS" value="1" />
+      </group>
+      <group description="Endpoint-zero status handling modes">
+        <define name="USB_EP0_STATUS_STAGE_SW" value="0" />
+        <define name="USB_EP0_STATUS_STAGE_HW" value="1" />
+      </group>
+      <group description="Set-address acknowledge handling modes">
+        <define name="USB_SET_ADDRESS_ACK_SW" value="0" />
+        <define name="USB_SET_ADDRESS_ACK_HW" value="1" />
+      </group>
+      <group description="Endpoint types">
+        <define name="USB_EP_MODE_TYPE" value="0x0003U" />
+        <define name="USB_EP_MODE_TYPE_CTRL" value="0x0000U" />
+        <define name="USB_EP_MODE_TYPE_ISOC" value="0x0001U" />
+        <define name="USB_EP_MODE_TYPE_BULK" value="0x0002U" />
+        <define name="USB_EP_MODE_TYPE_INTR" value="0x0003U" />
+      </group>
+      <group description="USB event flags">
+        <define name="USB_FLAGS_RESET" value="(1U &lt;&lt; 0)">
+          <brief>Bus reset event flag.</brief>
+        </define>
+        <define name="USB_FLAGS_ADDRESS" value="(1U &lt;&lt; 1)">
+          <brief>Set-address event flag.</brief>
+        </define>
+        <define name="USB_FLAGS_CONFIGURED" value="(1U &lt;&lt; 2)">
+          <brief>Configuration-selected event flag.</brief>
+        </define>
+        <define name="USB_FLAGS_UNCONFIGURED" value="(1U &lt;&lt; 3)">
+          <brief>Configuration-cleared event flag.</brief>
+        </define>
+        <define name="USB_FLAGS_SUSPEND" value="(1U &lt;&lt; 4)">
+          <brief>Suspend event flag.</brief>
+        </define>
+        <define name="USB_FLAGS_WAKEUP" value="(1U &lt;&lt; 5)">
+          <brief>Wake-up event flag.</brief>
+        </define>
+        <define name="USB_FLAGS_STALLED" value="(1U &lt;&lt; 6)">
+          <brief>Endpoint-zero stall event flag.</brief>
+        </define>
+      </group>
+    </definitions_early>
+    <configs>
+      <config name="USB_USE_SYNCHRONIZATION" default="TRUE">
+        <brief>Support for thread synchronization API.</brief>
+        <assert invalid="($N != FALSE) &amp;&amp; ($N != TRUE)" />
+      </config>
+      <config name="USB_USE_CONFIGURATIONS" default="FALSE">
+        <brief>Support for user-provided USB hardware configurations.</brief>
+        <note>When enabled the user must provide a variable named
+          @p usb_configurations of type @p usb_configurations_t.</note>
+        <assert invalid="($N != FALSE) &amp;&amp; ($N != TRUE)" />
+      </config>
+    </configs>
+    <macros>
+      <group description="Low level driver helper macros">
+        <macro name="_usb_isr_invoke_event_cb">
+          <brief>Common ISR code, USB event notification.</brief>
+          <param name="usbp" dir="both">Pointer to the USB driver instance.</param>
+          <param name="flags" dir="in">Event flags to be posted.</param>
+          <notapi />
+          <implementation><![CDATA[
+do {
+  (usbp)->events |= (usbeventflags_t)(flags);
+} while (false)]]></implementation>
+        </macro>
+        <macro name="_usb_isr_invoke_sof_cb">
+          <brief>Common ISR code, SOF notification.</brief>
+          <param name="usbp" dir="both">Pointer to the USB driver instance.</param>
+          <notapi />
+          <implementation><![CDATA[
+do {
+  if ((usbp)->binder != NULL) {
+    osalSysLockFromISR();
+    usbBinderSOFI((usbp)->binder);
+    osalSysUnlockFromISR();
+  }
+} while (false)]]></implementation>
+        </macro>
+        <macro name="_usb_isr_invoke_setup_cb">
+          <brief>Common ISR code, setup packet callback.</brief>
+          <param name="usbp" dir="both">Pointer to the USB driver instance.</param>
+          <param name="ep" dir="in">Endpoint number.</param>
+          <notapi />
+          <implementation><![CDATA[
+do {
+  if ((usbp)->epc[ep]->setup_cb != NULL) {
+    (usbp)->epc[ep]->setup_cb(usbp, ep);
+  }
+} while (false)]]></implementation>
+        </macro>
+        <condition check="USB_USE_SYNCHRONIZATION == TRUE">
+          <macro name="_usb_isr_invoke_in_cb">
+            <brief>Common ISR code, IN endpoint callback.</brief>
+            <param name="usbp" dir="both">Pointer to the USB driver instance.</param>
+            <param name="ep" dir="in">Endpoint number.</param>
+            <notapi />
+            <implementation><![CDATA[
+do {
+  (usbp)->transmitting &= ~(uint16_t)((unsigned)1U << (unsigned)(ep));
+  if ((usbp)->epc[ep]->in_cb != NULL) {
+    (usbp)->epc[ep]->in_cb(usbp, ep);
+  }
+  osalSysLockFromISR();
+  osalThreadResumeI(&(usbp)->epc[ep]->in_state->thread, MSG_OK);
+  osalSysUnlockFromISR();
+} while (false)]]></implementation>
+          </macro>
+          <macro name="_usb_isr_invoke_out_cb">
+            <brief>Common ISR code, OUT endpoint callback.</brief>
+            <param name="usbp" dir="both">Pointer to the USB driver instance.</param>
+            <param name="ep" dir="in">Endpoint number.</param>
+            <notapi />
+            <implementation><![CDATA[
+do {
+  (usbp)->receiving &= ~(uint16_t)((unsigned)1U << (unsigned)(ep));
+  if ((usbp)->epc[ep]->out_cb != NULL) {
+    (usbp)->epc[ep]->out_cb(usbp, ep);
+  }
+  osalSysLockFromISR();
+  osalThreadResumeI(&(usbp)->epc[ep]->out_state->thread,
+                    usbGetReceiveTransactionSizeX(usbp, ep));
+  osalSysUnlockFromISR();
+} while (false)]]></implementation>
+          </macro>
+          <elseif />
+          <macro name="_usb_isr_invoke_in_cb">
+            <param name="usbp" dir="both" />
+            <param name="ep" dir="in" />
+            <implementation><![CDATA[
+do {
+  (usbp)->transmitting &= ~(uint16_t)((unsigned)1U << (unsigned)(ep));
+  if ((usbp)->epc[ep]->in_cb != NULL) {
+    (usbp)->epc[ep]->in_cb(usbp, ep);
+  }
+} while (false)]]></implementation>
+          </macro>
+          <macro name="_usb_isr_invoke_out_cb">
+            <param name="usbp" dir="both" />
+            <param name="ep" dir="in" />
+            <implementation><![CDATA[
+do {
+  (usbp)->receiving &= ~(uint16_t)((unsigned)1U << (unsigned)(ep));
+  if ((usbp)->epc[ep]->out_cb != NULL) {
+    (usbp)->epc[ep]->out_cb(usbp, ep);
+  }
+} while (false)]]></implementation>
+          </macro>
+        </condition>
+      </group>
+    </macros>
+    <types>
+      <typedef name="usbeventflags_t">
+        <brief>Type of USB event flags.</brief>
+        <basetype ctype="uint32_t" />
+      </typedef>
+      <typedef name="hal_usb_driver_c">
+        <brief>Type of structure representing a USB driver.</brief>
+        <basetype ctype="struct hal_usb_driver" />
+      </typedef>
+      <typedef name="hal_usb_config_t">
+        <brief>Type of structure representing a USB hardware configuration.</brief>
+        <basetype ctype="struct hal_usb_config" />
+      </typedef>
+      <verbatim><![CDATA[
+typedef uint8_t usbep_t;
+typedef driver_state_t usbstate_t;
+struct hal_usb_service;
+struct hal_usb_binder;
+
+#define USB_SELECTED                       (HAL_DRV_STATE_ACTIVE + 1U)
+#define USB_ACTIVE                         (HAL_DRV_STATE_ACTIVE + 2U)
+#define USB_SUSPENDED                      (HAL_DRV_STATE_ACTIVE + 3U)
+
+typedef enum {
+  EP_STATUS_DISABLED = 0,
+  EP_STATUS_STALLED  = 1,
+  EP_STATUS_ACTIVE   = 2
+} usbepstatus_t;
+
+typedef enum {
+  USB_EP0_STP_WAITING      = 0U,
+  USB_EP0_IN_TX            = 1U,
+  USB_EP0_IN_WAITING_TX0   = 2U,
+  USB_EP0_IN_SENDING_STS   = 3U,
+  USB_EP0_OUT_WAITING_STS  = 4U,
+  USB_EP0_OUT_RX           = 5U,
+  USB_EP0_ERROR            = 6U
+} usbep0state_t;
+
+typedef struct {
+  size_t                    ud_size;
+  const uint8_t            *ud_string;
+} usb_descriptor_t;
+
+typedef void (*usbcallback_t)(hal_usb_driver_c *usbp);
+typedef void (*usbepcallback_t)(hal_usb_driver_c *usbp, usbep_t ep);
+
+typedef struct {
+  size_t                    txsize;
+  size_t                    txcnt;
+  size_t                    txlast;
+  const uint8_t            *txbuf;
+#if (USB_USE_SYNCHRONIZATION == TRUE) || defined(__DOXYGEN__)
+  thread_reference_t        thread;
+#endif
+} USBInEndpointState;
+
+typedef struct {
+  size_t                    rxsize;
+  size_t                    rxcnt;
+  size_t                    rxpkts;
+  uint8_t                  *rxbuf;
+#if (USB_USE_SYNCHRONIZATION == TRUE) || defined(__DOXYGEN__)
+  thread_reference_t        thread;
+#endif
+} USBOutEndpointState;
+
+typedef struct {
+  uint32_t                  ep_mode;
+  usbepcallback_t           setup_cb;
+  usbepcallback_t           in_cb;
+  usbepcallback_t           out_cb;
+  uint16_t                  in_maxsize;
+  uint16_t                  out_maxsize;
+  USBInEndpointState       *in_state;
+  USBOutEndpointState      *out_state;
+  unsigned                  ep_buffers;
+  uint8_t                  *setup_buf;
+} USBEndpointConfig;
+
+/* Inclusion of LLD header.*/
+#include "hal_usb_lld.h"]]></verbatim>
+      <struct name="hal_usb_config">
+        <brief>USB hardware configuration structure.</brief>
+        <note>Protocol and class behavior are configured separately through
+          the USB binder object.</note>
+        <fields>
+          <verbatim><![CDATA[
+/* End of the mandatory fields.*/
+usb_lld_config_fields;]]></verbatim>
+          <condition check="defined(USB_CONFIG_EXT_FIELDS)">
+            <verbatim><![CDATA[
+USB_CONFIG_EXT_FIELDS]]></verbatim>
+          </condition>
+        </fields>
+      </struct>
+      <verbatim><![CDATA[
+typedef struct usb_configurations usb_configurations_t;
+struct usb_configurations {
+  unsigned                  cfgsnum;
+  hal_usb_config_t          cfgs[];
+};]]></verbatim>
+      <typedef name="hal_usb_service_info_t">
+        <brief>Type of structure representing USB service ownership metadata.</brief>
+        <basetype ctype="struct hal_usb_service_info" />
+      </typedef>
+      <struct name="hal_usb_service_info">
+        <brief>USB service ownership metadata.</brief>
+        <details><![CDATA[This structure identifies the interfaces and
+          endpoints managed by a USB service instance. Endpoint zero is never
+          owned by a service.]]></details>
+        <fields>
+          <field name="if_base" ctype="uint8_t">
+            <brief>First interface number owned by the service.</brief>
+          </field>
+          <field name="if_count" ctype="uint8_t">
+            <brief>Number of consecutive interfaces owned by the service.</brief>
+          </field>
+          <field name="in_ep_mask" ctype="uint16_t">
+            <brief>Bit mask of owned IN endpoints, bit N corresponds to
+              endpoint N.</brief>
+          </field>
+          <field name="out_ep_mask" ctype="uint16_t">
+            <brief>Bit mask of owned OUT endpoints, bit N corresponds to
+              endpoint N.</brief>
+          </field>
+        </fields>
+      </struct>
+      <class type="abstract" name="hal_usb_service" namespace="usbsvc"
+        ancestorname="base_object" descr="USB service">
+        <brief>Base class for composable USB services.</brief>
+        <details><![CDATA[This class represents a reusable USB function or
+          service managed by a USB binder. A service exposes static ownership
+          metadata together with USB-specific lifecycle and dispatch hooks, but
+          it does not own the USB peripheral lifecycle. The virtual methods
+          carrying the @p I suffix must be invoked with the system lock
+          already held by the caller.]]></details>
+        <fields>
+          <field name="binder" ctype="struct hal_usb_binder *">
+            <brief>Binder currently owning the service, can be @p NULL.</brief>
+          </field>
+          <field name="info" ctype="const hal_usb_service_info_t *">
+            <brief>Pointer to the immutable service ownership metadata.</brief>
+          </field>
+          <field name="arg" ctype="void *">
+            <brief>Application-defined service argument.</brief>
+          </field>
+          <field name="next" ctype="hal_usb_service_c *">
+            <brief>Next service in the binder registration list.</brief>
+          </field>
+          <field name="prev" ctype="hal_usb_service_c *">
+            <brief>Previous service in the binder registration list.</brief>
+          </field>
+        </fields>
+        <methods>
+          <objinit callsuper="true">
+            <implementation><![CDATA[
+self->binder = NULL;
+self->info   = NULL;
+self->arg    = NULL;
+self->next   = NULL;
+self->prev   = NULL;]]></implementation>
+          </objinit>
+          <dispose>
+            <implementation><![CDATA[ ]]></implementation>
+          </dispose>
+          <virtual>
+            <method name="usbServiceOnBind" shortname="bind" ctype="msg_t">
+              <brief>Service-specific binding hook.</brief>
+              <param name="binderp" ctype="struct hal_usb_binder *" dir="in">
+                Binder owning the service.
+              </param>
+              <return>The operation status.</return>
+              <implementation><![CDATA[
+(void)self;
+(void)binderp;
+
+return HAL_RET_SUCCESS;]]></implementation>
+            </method>
+            <method name="usbServiceOnUnbind" shortname="unbind" ctype="void">
+              <brief>Service-specific unbind hook.</brief>
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnResetI" shortname="reset" ctype="void">
+              <brief>Service-specific reset notification hook.</brief>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnConfigureI" shortname="configure"
+              ctype="void">
+              <brief>Service-specific configure notification hook.</brief>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnUnconfigureI" shortname="unconfigure"
+              ctype="void">
+              <brief>Service-specific unconfigure notification hook.</brief>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnSuspendI" shortname="suspend"
+              ctype="void">
+              <brief>Service-specific suspend notification hook.</brief>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnWakeupI" shortname="wakeup"
+              ctype="void">
+              <brief>Service-specific wake-up notification hook.</brief>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnSOFI" shortname="sof" ctype="void">
+              <brief>Service-specific SOF notification hook.</brief>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbServiceOnInI" shortname="in" ctype="void">
+              <brief>Service-specific IN endpoint notification hook.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;
+(void)ep;]]></implementation>
+            </method>
+            <method name="usbServiceOnOutI" shortname="out" ctype="void">
+              <brief>Service-specific OUT endpoint notification hook.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <iclass />
+              <implementation><![CDATA[
+(void)self;
+(void)ep;]]></implementation>
+            </method>
+            <method name="usbServiceOnSetup" shortname="setup" ctype="msg_t">
+              <brief>Service-specific endpoint-zero request hook.</brief>
+              <param name="handledp" ctype="bool *" dir="out">
+                Handled flag.
+              </param>
+              <return>The operation status.</return>
+              <implementation><![CDATA[
+(void)self;
+if (handledp != NULL) {
+  *handledp = false;
+}
+
+return HAL_RET_SUCCESS;]]></implementation>
+            </method>
+          </virtual>
+          <inline>
+            <method name="usbServiceObjectInit" ctype="hal_usb_service_c *">
+              <brief>Initializes the base USB service part of a derived
+                object.</brief>
+              <param name="infop" ctype="const hal_usb_service_info_t *"
+                dir="in">
+                Service ownership metadata.
+              </param>
+              <param name="vmt" ctype="const struct hal_usb_service_vmt *"
+                dir="in">
+                VMT of the concrete derived service.
+              </param>
+              <return>Pointer to the initialized object.</return>
+              <objinit />
+              <implementation><![CDATA[
+self = __usbsvc_objinit_impl(self, vmt);
+self->info = infop;
+
+return self;]]></implementation>
+            </method>
+            <method name="usbServiceGetBinderX"
+              ctype="hal_usb_binder_c *">
+              <brief>Returns the current binder owning the service.</brief>
+              <return>The bound binder or @p NULL.</return>
+              <xclass />
+              <implementation><![CDATA[
+return (hal_usb_binder_c *)self->binder;]]></implementation>
+            </method>
+            <method name="usbServiceGetInfoX"
+              ctype="const hal_usb_service_info_t *">
+              <brief>Returns the service ownership metadata.</brief>
+              <return>Pointer to the immutable metadata.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->info;]]></implementation>
+            </method>
+            <method name="usbServiceSetArgumentX" ctype="void">
+              <brief>Sets the application-defined service argument.</brief>
+              <param name="arg" ctype="void *" dir="in">
+                The new application-defined argument.
+              </param>
+              <xclass />
+              <implementation><![CDATA[
+self->arg = arg;]]></implementation>
+            </method>
+            <method name="usbServiceGetArgumentX" ctype="void *">
+              <brief>Returns the application-defined service argument.</brief>
+              <return>The application-defined argument.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->arg;]]></implementation>
+            </method>
+            <method name="usbServiceOwnsInterfaceX" ctype="bool">
+              <brief>Checks whether the service owns a specific interface
+                number.</brief>
+              <param name="ifn" ctype="uint8_t" dir="in">
+                Interface number to be tested.
+              </param>
+              <return>Ownership result.</return>
+              <xclass />
+              <implementation><![CDATA[
+unsigned base;
+unsigned limit;
+
+if ((self->info == NULL) || (self->info->if_count == 0U)) {
+  return false;
+}
+
+base  = (unsigned)self->info->if_base;
+limit = base + (unsigned)self->info->if_count;
+
+return ((unsigned)ifn >= base) && ((unsigned)ifn < limit);]]></implementation>
+            </method>
+            <method name="usbServiceOwnsInEndpointX" ctype="bool">
+              <brief>Checks whether the service owns a specific IN
+                endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <return>Ownership result.</return>
+              <xclass />
+              <implementation><![CDATA[
+if ((self->info == NULL) || (ep > (usbep_t)15U)) {
+  return false;
+}
+
+return (bool)((self->info->in_ep_mask &
+               (uint16_t)((unsigned)1U << (unsigned)ep)) != 0U);]]></implementation>
+            </method>
+            <method name="usbServiceOwnsOutEndpointX" ctype="bool">
+              <brief>Checks whether the service owns a specific OUT
+                endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <return>Ownership result.</return>
+              <xclass />
+              <implementation><![CDATA[
+if ((self->info == NULL) || (ep > (usbep_t)15U)) {
+  return false;
+}
+
+return (bool)((self->info->out_ep_mask &
+               (uint16_t)((unsigned)1U << (unsigned)ep)) != 0U);]]></implementation>
+            </method>
+          </inline>
+        </methods>
+      </class>
+      <class type="abstract" name="hal_usb_binder" namespace="usbbnd"
+        ancestorname="base_object" descr="USB binder">
+        <brief>Base class for USB device binders.</brief>
+        <details><![CDATA[A binder is the device-composition object sitting
+          between a USB driver instance and one or more USB services. The
+          binder owns the final descriptors and dispatches USB events to the
+          registered services. The virtual methods carrying the @p I suffix
+          must be invoked with the system lock already held by the caller.]]></details>
+        <fields>
+          <field name="usbp" ctype="hal_usb_driver_c *">
+            <brief>Currently bound USB driver, can be @p NULL.</brief>
+          </field>
+          <field name="services" ctype="hal_usb_service_c *">
+            <brief>Head of the registered services list.</brief>
+          </field>
+          <field name="service_last" ctype="hal_usb_service_c *">
+            <brief>Tail of the registered services list.</brief>
+          </field>
+          <field name="services_num" ctype="unsigned">
+            <brief>Number of registered services.</brief>
+          </field>
+          <field name="arg" ctype="void *">
+            <brief>Application-defined binder argument.</brief>
+          </field>
+        </fields>
+        <methods>
+          <objinit callsuper="true">
+            <implementation><![CDATA[
+self->usbp         = NULL;
+self->services     = NULL;
+self->service_last = NULL;
+self->services_num = 0U;
+self->arg          = NULL;]]></implementation>
+          </objinit>
+          <dispose>
+            <implementation><![CDATA[ ]]></implementation>
+          </dispose>
+          <virtual>
+            <method name="usbBinderOnBind" shortname="bind" ctype="msg_t">
+              <brief>Binder-specific bind hook.</brief>
+              <param name="usbp" ctype="hal_usb_driver_c *" dir="in">
+                USB driver instance.
+              </param>
+              <return>The operation status.</return>
+              <implementation><![CDATA[
+(void)self;
+(void)usbp;
+
+return HAL_RET_SUCCESS;]]></implementation>
+            </method>
+            <method name="usbBinderOnUnbind" shortname="unbind" ctype="void">
+              <brief>Binder-specific unbind hook.</brief>
+              <implementation><![CDATA[
+(void)self;]]></implementation>
+            </method>
+            <method name="usbBinderOnGetDescriptor" shortname="get_descriptor"
+              ctype="const usb_descriptor_t *">
+              <brief>Binder-specific descriptor lookup hook.</brief>
+              <param name="dtype" ctype="uint8_t" dir="in">Descriptor type.</param>
+              <param name="dindex" ctype="uint8_t" dir="in">Descriptor index.</param>
+              <param name="lang" ctype="uint16_t" dir="in">Language identifier.</param>
+              <return>Descriptor lookup result.</return>
+              <implementation><![CDATA[
+(void)self;
+(void)dtype;
+(void)dindex;
+(void)lang;
+
+return NULL;]]></implementation>
+            </method>
+            <method name="usbBinderOnResetI" shortname="reset" ctype="void">
+              <brief>Default reset notification dispatcher.</brief>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  usbServiceOnResetI(servicep);
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnConfigureI" shortname="configure"
+              ctype="void">
+              <brief>Default configure notification dispatcher.</brief>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  usbServiceOnConfigureI(servicep);
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnUnconfigureI" shortname="unconfigure"
+              ctype="void">
+              <brief>Default unconfigure notification dispatcher.</brief>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  usbServiceOnUnconfigureI(servicep);
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnSuspendI" shortname="suspend"
+              ctype="void">
+              <brief>Default suspend notification dispatcher.</brief>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  usbServiceOnSuspendI(servicep);
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnWakeupI" shortname="wakeup"
+              ctype="void">
+              <brief>Default wake-up notification dispatcher.</brief>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  usbServiceOnWakeupI(servicep);
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnSOFI" shortname="sof" ctype="void">
+              <brief>Default SOF notification dispatcher.</brief>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  usbServiceOnSOFI(servicep);
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnInI" shortname="in" ctype="void">
+              <brief>Default IN endpoint notification dispatcher.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  if (usbServiceOwnsInEndpointX(servicep, ep)) {
+    usbServiceOnInI(servicep, ep);
+    return;
+  }
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnOutI" shortname="out" ctype="void">
+              <brief>Default OUT endpoint notification dispatcher.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <iclass />
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  if (usbServiceOwnsOutEndpointX(servicep, ep)) {
+    usbServiceOnOutI(servicep, ep);
+    return;
+  }
+}]]></implementation>
+            </method>
+            <method name="usbBinderOnSetup" shortname="setup" ctype="msg_t">
+              <brief>Default endpoint-zero request dispatcher.</brief>
+              <param name="handledp" ctype="bool *" dir="out">
+                Handled flag.
+              </param>
+              <return>The operation status.</return>
+              <implementation><![CDATA[
+hal_usb_service_c *servicep;
+
+*handledp = false;
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  msg_t msg;
+  bool handled;
+
+  handled = false;
+  msg = usbServiceSetup(servicep, &handled);
+  if ((msg != HAL_RET_SUCCESS) || handled) {
+    *handledp = handled;
+    return msg;
+  }
+}
+
+return HAL_RET_SUCCESS;]]></implementation>
+            </method>
+          </virtual>
+          <inline>
+            <method name="usbBinderObjectInit" ctype="hal_usb_binder_c *">
+              <brief>Initializes the base USB binder part of a derived
+                object.</brief>
+              <param name="vmt" ctype="const struct hal_usb_binder_vmt *"
+                dir="in">
+                VMT of the concrete derived binder.
+              </param>
+              <return>Pointer to the initialized object.</return>
+              <objinit />
+              <implementation><![CDATA[
+return __usbbnd_objinit_impl(self, vmt);]]></implementation>
+            </method>
+            <method name="usbBinderGetDriverX" ctype="hal_usb_driver_c *">
+              <brief>Returns the currently bound USB driver.</brief>
+              <return>The bound USB driver or @p NULL.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->usbp;]]></implementation>
+            </method>
+            <method name="usbBinderGetFirstServiceX"
+              ctype="hal_usb_service_c *">
+              <brief>Returns the first registered service.</brief>
+              <return>Pointer to the first service or @p NULL.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->services;]]></implementation>
+            </method>
+            <method name="usbBinderGetServicesNumX" ctype="unsigned">
+              <brief>Returns the number of registered services.</brief>
+              <return>The number of registered services.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->services_num;]]></implementation>
+            </method>
+            <method name="usbBinderSetArgumentX" ctype="void">
+              <brief>Sets the application-defined binder argument.</brief>
+              <param name="arg" ctype="void *" dir="in">
+                The new application-defined argument.
+              </param>
+              <xclass />
+              <implementation><![CDATA[
+self->arg = arg;]]></implementation>
+            </method>
+            <method name="usbBinderGetArgumentX" ctype="void *">
+              <brief>Returns the application-defined binder argument.</brief>
+              <return>The application-defined argument.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->arg;]]></implementation>
+            </method>
+          </inline>
+        </methods>
+      </class>
+      <class type="regular" name="hal_usb_driver" namespace="usb"
+        ancestorname="hal_base_driver" descr="USB driver">
+        <brief>Class of a USB driver.</brief>
+        <fields>
+          <field name="events" ctype="volatile usbeventflags_t">
+            <brief>Cached USB event flags.</brief>
+          </field>
+          <verbatim><![CDATA[
+hal_usb_binder_c          *binder;
+uint16_t                    transmitting;
+uint16_t                    receiving;
+const USBEndpointConfig    *epc[USB_MAX_ENDPOINTS + 1U];
+void                       *in_params[USB_MAX_ENDPOINTS];
+void                       *out_params[USB_MAX_ENDPOINTS];
+usbep0state_t               ep0state;
+uint8_t                    *ep0next;
+size_t                      ep0n;
+usbcallback_t               ep0endcb;
+thread_reference_t          ep0thread;
+uint8_t                     ep0seq;
+uint8_t                     ep0rseq;
+uint8_t                     ep0setup;
+uint8_t                     ep0reset;
+uint8_t                     setup[8];
+uint16_t                    status;
+uint8_t                     address;
+uint8_t                     configuration;
+usbstate_t                  saved_state;
+#if defined(USB_DRIVER_EXT_FIELDS)
+USB_DRIVER_EXT_FIELDS
+#endif
+/* End of the mandatory fields.*/
+usb_lld_driver_fields;]]></verbatim>
+        </fields>
+        <methods>
+          <objinit callsuper="true">
+            <implementation><![CDATA[
+unsigned i;
+
+self->events        = (usbeventflags_t)0U;
+self->binder        = NULL;
+self->transmitting  = 0U;
+self->receiving     = 0U;
+self->ep0state      = USB_EP0_STP_WAITING;
+self->ep0next       = NULL;
+self->ep0n          = 0U;
+self->ep0endcb      = NULL;
+self->ep0thread     = NULL;
+self->ep0seq        = 0U;
+self->ep0rseq       = 0U;
+self->ep0setup      = 0U;
+self->ep0reset      = 0U;
+self->status        = 0U;
+self->address       = 0U;
+self->configuration = 0U;
+self->saved_state   = HAL_DRV_STATE_STOP;
+for (i = 0U; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+  self->epc[i] = NULL;
+}
+for (i = 0U; i < (unsigned)USB_MAX_ENDPOINTS; i++) {
+  self->in_params[i] = NULL;
+  self->out_params[i] = NULL;
+}]]></implementation>
+          </objinit>
+          <dispose>
+            <implementation><![CDATA[
+]]></implementation>
+          </dispose>
+          <regular>
+            <method name="usbBind" ctype="msg_t">
+              <brief>Attaches a USB binder to the USB driver.</brief>
+              <param name="binderp" ctype="hal_usb_binder_c *" dir="in">
+                USB binder object.
+              </param>
+              <return>The operation status.</return>
+              <api />
+              <implementation><![CDATA[
+msg_t msg;
+
+osalDbgCheck((self != NULL) && (binderp != NULL));
+
+osalSysLock();
+if ((self->state == USB_SELECTED) ||
+    (self->state == USB_ACTIVE) ||
+    (self->state == USB_SUSPENDED)) {
+  osalSysUnlock();
+  return HAL_RET_INV_STATE;
+}
+osalDbgAssert(self->binder == NULL, "binder already attached");
+osalSysUnlock();
+
+msg = usbBinderBind(binderp, self);
+if (msg == HAL_RET_SUCCESS) {
+  self->binder = binderp;
+}
+
+return msg;]]></implementation>
+            </method>
+            <method name="usbUnbind" ctype="msg_t">
+              <brief>Detaches the currently bound USB binder.</brief>
+              <return>The operation status.</return>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+osalSysLock();
+if ((self->state == USB_SELECTED) ||
+    (self->state == USB_ACTIVE) ||
+    (self->state == USB_SUSPENDED)) {
+  osalSysUnlock();
+  return HAL_RET_INV_STATE;
+}
+if (self->binder != NULL) {
+  usbBinderUnbind(self->binder);
+  self->binder = NULL;
+}
+osalSysUnlock();
+
+return HAL_RET_SUCCESS;]]></implementation>
+            </method>
+            <method name="usbConnectBus" ctype="void">
+              <brief>Connects the USB device to the bus.</brief>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+osalDbgAssert(self->binder != NULL, "no binder");
+
+usb_lld_connect_bus(self);]]></implementation>
+            </method>
+            <method name="usbDisconnectBus" ctype="void">
+              <brief>Disconnects the USB device from the bus.</brief>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+usb_lld_disconnect_bus(self);]]></implementation>
+            </method>
+            <method name="usbInitEndpointI" ctype="void">
+              <brief>Enables an endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <param name="epcp" ctype="const USBEndpointConfig *" dir="in">
+                Endpoint configuration.
+              </param>
+              <iclass />
+              <implementation><![CDATA[
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (epcp != NULL) &&
+             (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+osalDbgAssert(self->state == USB_ACTIVE, "invalid state");
+osalDbgAssert(self->epc[ep] == NULL, "already initialized");
+
+self->epc[ep] = epcp;
+if (epcp->in_state != NULL) {
+  memset(epcp->in_state, 0, sizeof(USBInEndpointState));
+}
+if (epcp->out_state != NULL) {
+  memset(epcp->out_state, 0, sizeof(USBOutEndpointState));
+}
+
+usb_lld_init_endpoint(self, ep);]]></implementation>
+            </method>
+            <method name="usbDisableEndpointsI" ctype="void">
+              <brief>Disables all active endpoints except endpoint zero.</brief>
+              <iclass />
+              <implementation><![CDATA[
+unsigned i;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+osalDbgAssert(self->state == USB_ACTIVE, "invalid state");
+
+self->transmitting &= 1U;
+self->receiving    &= 1U;
+for (i = 1U; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+#if USB_USE_SYNCHRONIZATION == TRUE
+  if (self->epc[i] != NULL) {
+    if (self->epc[i]->in_state != NULL) {
+      osalThreadResumeI(&self->epc[i]->in_state->thread, MSG_RESET);
+    }
+    if (self->epc[i]->out_state != NULL) {
+      osalThreadResumeI(&self->epc[i]->out_state->thread, MSG_RESET);
+    }
+  }
+#endif
+  self->epc[i] = NULL;
+}
+
+usb_lld_disable_endpoints(self);]]></implementation>
+            </method>
+            <method name="usbReadSetupI" ctype="void">
+              <brief>Reads a setup packet from endpoint zero.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <param name="buf" ctype="uint8_t *" dir="out">
+                Setup packet buffer.
+              </param>
+              <iclass />
+              <implementation><![CDATA[
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (buf != NULL) &&
+             (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+
+usb_lld_read_setup(self, ep, buf);]]></implementation>
+            </method>
+            <method name="usbStartReceiveI" ctype="void">
+              <brief>Starts a receive transaction on an OUT endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <param name="buf" ctype="uint8_t *" dir="out">Receive buffer.</param>
+              <param name="n" ctype="size_t" dir="in">Transaction size.</param>
+              <iclass />
+              <implementation><![CDATA[
+USBOutEndpointState *osp;
+
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+osalDbgAssert((self->epc[ep] != NULL) && (self->epc[ep]->out_state != NULL),
+              "endpoint not configured");
+osalDbgAssert((self->receiving &
+               (uint16_t)((unsigned)1U << (unsigned)ep)) == 0U,
+              "already receiving");
+
+self->receiving |= (uint16_t)((unsigned)1U << (unsigned)ep);
+osp = self->epc[ep]->out_state;
+osp->rxbuf  = buf;
+osp->rxsize = n;
+osp->rxcnt  = 0U;
+osp->rxpkts = 0U;
+#if USB_USE_SYNCHRONIZATION == TRUE
+osp->thread = NULL;
+#endif
+
+usb_lld_start_out(self, ep);]]></implementation>
+            </method>
+            <method name="usbStartTransmitI" ctype="void">
+              <brief>Starts a transmit transaction on an IN endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <param name="buf" ctype="const uint8_t *" dir="in">
+                Transmit buffer.
+              </param>
+              <param name="n" ctype="size_t" dir="in">Transaction size.</param>
+              <iclass />
+              <implementation><![CDATA[
+USBInEndpointState *isp;
+
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+osalDbgAssert((self->epc[ep] != NULL) && (self->epc[ep]->in_state != NULL),
+              "endpoint not configured");
+osalDbgAssert((self->transmitting &
+               (uint16_t)((unsigned)1U << (unsigned)ep)) == 0U,
+              "already transmitting");
+
+self->transmitting |= (uint16_t)((unsigned)1U << (unsigned)ep);
+isp = self->epc[ep]->in_state;
+isp->txbuf  = buf;
+isp->txsize = n;
+isp->txcnt  = 0U;
+isp->txlast = 0U;
+#if USB_USE_SYNCHRONIZATION == TRUE
+isp->thread = NULL;
+#endif
+
+usb_lld_start_in(self, ep);]]></implementation>
+            </method>
+            <condition check="USB_USE_SYNCHRONIZATION == TRUE">
+              <method name="usbReceive" ctype="msg_t">
+                <brief>Performs a blocking receive transaction.</brief>
+                <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+                <param name="buf" ctype="uint8_t *" dir="out">Receive buffer.</param>
+                <param name="n" ctype="size_t" dir="in">Transaction size.</param>
+                <return>The received size or @p MSG_RESET.</return>
+                <api />
+                <implementation><![CDATA[
+msg_t msg;
+
+osalSysLock();
+if (self->state != USB_ACTIVE) {
+  osalSysUnlock();
+  return MSG_RESET;
+}
+
+usbStartReceiveI(self, ep, buf, n);
+msg = osalThreadSuspendS(&self->epc[ep]->out_state->thread);
+osalSysUnlock();
+
+return msg;]]></implementation>
+              </method>
+              <method name="usbTransmit" ctype="msg_t">
+                <brief>Performs a blocking transmit transaction.</brief>
+                <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+                <param name="buf" ctype="const uint8_t *" dir="in">
+                  Transmit buffer.
+                </param>
+                <param name="n" ctype="size_t" dir="in">Transaction size.</param>
+                <return>The operation status.</return>
+                <api />
+                <implementation><![CDATA[
+msg_t msg;
+
+osalSysLock();
+if (self->state != USB_ACTIVE) {
+  osalSysUnlock();
+  return MSG_RESET;
+}
+
+usbStartTransmitI(self, ep, buf, n);
+msg = osalThreadSuspendS(&self->epc[ep]->in_state->thread);
+osalSysUnlock();
+
+return msg;]]></implementation>
+              </method>
+            </condition>
+            <method name="usbEp0WaitSetup" ctype="msg_t">
+              <brief>Waits for a new endpoint-zero setup packet.</brief>
+              <return>@p MSG_OK if a setup packet is available.</return>
+              <api />
+              <implementation><![CDATA[
+msg_t msg;
+
+osalDbgCheck(self != NULL);
+
+osalSysLock();
+if ((self->state == HAL_DRV_STATE_STOP) ||
+    (self->state == HAL_DRV_STATE_UNINIT)) {
+  osalSysUnlock();
+  return MSG_RESET;
+}
+if (self->ep0reset != 0U) {
+  self->ep0reset = 0U;
+  osalSysUnlock();
+  return MSG_RESET;
+}
+if (self->ep0setup != 0U) {
+  self->ep0setup = 0U;
+  self->ep0rseq = self->ep0seq;
+  osalSysUnlock();
+  return MSG_OK;
+}
+
+msg = osalThreadSuspendS(&self->ep0thread);
+if (msg == MSG_OK) {
+  self->ep0setup = 0U;
+  self->ep0rseq = self->ep0seq;
+}
+else {
+  self->ep0reset = 0U;
+}
+osalSysUnlock();
+
+return msg;]]></implementation>
+            </method>
+            <method name="usbEp0Reply" ctype="msg_t">
+              <brief>Replies to the current endpoint-zero request.</brief>
+              <param name="buf" ctype="const uint8_t *" dir="in">
+                Reply buffer.
+              </param>
+              <param name="n" ctype="size_t" dir="in">Reply size.</param>
+              <return>The operation status.</return>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+return ep0_reply_or_ack(self, buf, n);]]></implementation>
+            </method>
+            <method name="usbEp0Receive" ctype="msg_t">
+              <brief>Receives the data phase of the current endpoint-zero request.</brief>
+              <param name="buf" ctype="uint8_t *" dir="out">Receive buffer.</param>
+              <param name="n" ctype="size_t" dir="in">Receive size.</param>
+              <return>The operation status.</return>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+return ep0_receive_or_status(self, buf, n);]]></implementation>
+            </method>
+            <method name="usbEp0Acknowledge" ctype="msg_t">
+              <brief>Acknowledges the current endpoint-zero request.</brief>
+              <return>The operation status.</return>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+return ep0_receive_or_status(self, NULL, 0U);]]></implementation>
+            </method>
+            <method name="usbEp0Stall" ctype="void">
+              <brief>Stalls endpoint zero.</brief>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+osalSysLock();
+usb_lld_stall_in(self, 0);
+usb_lld_stall_out(self, 0);
+self->receiving &= ~1U;
+self->transmitting &= ~1U;
+self->ep0n = 0U;
+self->ep0state = USB_EP0_ERROR;
+osalSysUnlock();
+
+usb_invoke_event_cb(self, USB_FLAGS_STALLED);]]></implementation>
+            </method>
+            <method name="usbEp0HandleStandardRequest" ctype="msg_t">
+              <brief>Handles the current standard endpoint-zero request.</brief>
+              <param name="handledp" ctype="bool *" dir="out">
+                Standard-request handled flag.
+              </param>
+              <return>The operation status.</return>
+              <api />
+              <implementation><![CDATA[
+msg_t msg = MSG_OK;
+uint16_t type;
+uint16_t recipient;
+uint16_t request;
+const usb_descriptor_t *dp;
+
+osalDbgCheck((self != NULL) && (handledp != NULL));
+
+*handledp = false;
+
+if ((self->setup[0] & USB_RTYPE_TYPE_MASK) != USB_RTYPE_TYPE_STD) {
+  return MSG_OK;
+}
+
+*handledp = true;
+recipient = self->setup[0] & USB_RTYPE_RECIPIENT_MASK;
+request = self->setup[1];
+type = recipient | (uint16_t)(request << 8U);
+
+switch (type) {
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_GET_STATUS << 8):
+  msg = usbEp0Reply(self, (const uint8_t *)&self->status, 2U);
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_CLEAR_FEATURE << 8):
+  if (self->setup[2] == USB_FEATURE_DEVICE_REMOTE_WAKEUP) {
+    self->status &= ~2U;
+    msg = usbEp0Acknowledge(self);
+  }
+  else {
+    usbEp0Stall(self);
+  }
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_SET_FEATURE << 8):
+  if (self->setup[2] == USB_FEATURE_DEVICE_REMOTE_WAKEUP) {
+    self->status |= 2U;
+    msg = usbEp0Acknowledge(self);
+  }
+  else {
+    usbEp0Stall(self);
+  }
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_SET_ADDRESS << 8):
+#if USB_SET_ADDRESS_MODE == USB_EARLY_SET_ADDRESS
+  self->address = self->setup[2];
+  usb_lld_set_address(self);
+#endif
+  msg = usbEp0Acknowledge(self);
+  if (msg == MSG_OK) {
+#if USB_SET_ADDRESS_MODE == USB_LATE_SET_ADDRESS
+    set_address_thread(self);
+#else
+    usb_invoke_event_cb(self, USB_FLAGS_ADDRESS);
+    self->state = USB_SELECTED;
+#endif
+  }
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_GET_DESCRIPTOR << 8):
+case (uint32_t)USB_RTYPE_RECIPIENT_INTERFACE |
+     ((uint32_t)USB_REQ_GET_DESCRIPTOR << 8):
+  if (self->binder == NULL) {
+    usbEp0Stall(self);
+    break;
+  }
+  dp = usbBinderGetDescriptor(self->binder, self->setup[3],
+                              self->setup[2],
+                              get_hword(&self->setup[4]));
+  if (dp != NULL) {
+    msg = usbEp0Reply(self, dp->ud_string, dp->ud_size);
+  }
+  else {
+    usbEp0Stall(self);
+  }
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_GET_CONFIGURATION << 8):
+  msg = usbEp0Reply(self, &self->configuration, 1U);
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_DEVICE |
+     ((uint32_t)USB_REQ_SET_CONFIGURATION << 8):
+  if (self->state == USB_ACTIVE) {
+    osalSysLock();
+    usbDisableEndpointsI(self);
+    if (self->binder != NULL) {
+      usbBinderUnconfigureI(self->binder);
+    }
+    osalSysUnlock();
+    self->configuration = 0U;
+    self->state = USB_SELECTED;
+    usb_invoke_event_cb(self, USB_FLAGS_UNCONFIGURED);
+  }
+  if (self->setup[2] != 0U) {
+    self->configuration = self->setup[2];
+    self->state = USB_ACTIVE;
+    osalSysLock();
+    if (self->binder != NULL) {
+      usbBinderConfigureI(self->binder);
+    }
+    osalSysUnlock();
+    usb_invoke_event_cb(self, USB_FLAGS_CONFIGURED);
+  }
+  msg = usbEp0Acknowledge(self);
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_INTERFACE |
+     ((uint32_t)USB_REQ_GET_STATUS << 8):
+case (uint32_t)USB_RTYPE_RECIPIENT_ENDPOINT |
+     ((uint32_t)USB_REQ_SYNCH_FRAME << 8):
+  msg = usbEp0Reply(self, zero_status, 2U);
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_ENDPOINT |
+     ((uint32_t)USB_REQ_GET_STATUS << 8):
+  if ((self->setup[4] & 0x80U) != 0U) {
+    switch (usb_lld_get_status_in(self, self->setup[4] & 0x0FU)) {
+    case EP_STATUS_STALLED:
+      msg = usbEp0Reply(self, halted_status, 2U);
+      break;
+    case EP_STATUS_ACTIVE:
+      msg = usbEp0Reply(self, active_status, 2U);
+      break;
+    case EP_STATUS_DISABLED:
+    default:
+      usbEp0Stall(self);
+      break;
+    }
+  }
+  else {
+    switch (usb_lld_get_status_out(self, self->setup[4] & 0x0FU)) {
+    case EP_STATUS_STALLED:
+      msg = usbEp0Reply(self, halted_status, 2U);
+      break;
+    case EP_STATUS_ACTIVE:
+      msg = usbEp0Reply(self, active_status, 2U);
+      break;
+    case EP_STATUS_DISABLED:
+    default:
+      usbEp0Stall(self);
+      break;
+    }
+  }
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_ENDPOINT |
+     ((uint32_t)USB_REQ_CLEAR_FEATURE << 8):
+  if (self->setup[2] == USB_FEATURE_ENDPOINT_HALT) {
+    osalSysLock();
+    if ((self->setup[4] & 0x0FU) != 0U) {
+      if ((self->setup[4] & 0x80U) != 0U) {
+        usb_lld_clear_in(self, self->setup[4] & 0x0FU);
+      }
+      else {
+        usb_lld_clear_out(self, self->setup[4] & 0x0FU);
+      }
+    }
+    osalSysUnlock();
+    msg = usbEp0Acknowledge(self);
+  }
+  else {
+    usbEp0Stall(self);
+  }
+  break;
+case (uint32_t)USB_RTYPE_RECIPIENT_ENDPOINT |
+     ((uint32_t)USB_REQ_SET_FEATURE << 8):
+  if (self->setup[2] == USB_FEATURE_ENDPOINT_HALT) {
+    osalSysLock();
+    if ((self->setup[4] & 0x0FU) != 0U) {
+      if ((self->setup[4] & 0x80U) != 0U) {
+        usb_lld_stall_in(self, self->setup[4] & 0x0FU);
+      }
+      else {
+        usb_lld_stall_out(self, self->setup[4] & 0x0FU);
+      }
+    }
+    osalSysUnlock();
+    msg = usbEp0Acknowledge(self);
+  }
+  else {
+    usbEp0Stall(self);
+  }
+  break;
+default:
+  *handledp = false;
+  break;
+}
+
+return msg;]]></implementation>
+            </method>
+            <method name="usbStallReceiveI" ctype="bool">
+              <brief>Stalls an OUT endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <return>@p true if the endpoint is busy and was not stalled.</return>
+              <iclass />
+              <implementation><![CDATA[
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+
+if (((self->receiving &
+      (uint16_t)((unsigned)1U << (unsigned)ep))) != 0U) {
+  return true;
+}
+
+usb_lld_stall_out(self, ep);
+return false;]]></implementation>
+            </method>
+            <method name="usbStallTransmitI" ctype="bool">
+              <brief>Stalls an IN endpoint.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <return>@p true if the endpoint is busy and was not stalled.</return>
+              <iclass />
+              <implementation><![CDATA[
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+
+if (((self->transmitting &
+      (uint16_t)((unsigned)1U << (unsigned)ep))) != 0U) {
+  return true;
+}
+
+usb_lld_stall_in(self, ep);
+return false;]]></implementation>
+            </method>
+            <method name="usbWakeupHost" ctype="void">
+              <brief>Starts the host wake-up procedure.</brief>
+              <api />
+              <implementation><![CDATA[
+osalDbgCheck(self != NULL);
+
+if (self->state == USB_SUSPENDED) {
+  usb_lld_wakeup_host(self);
+}]]></implementation>
+            </method>
+          </regular>
+          <inline>
+            <method name="usbGetDriverStateX" ctype="usbstate_t">
+              <brief>Returns the current USB driver state.</brief>
+              <return>The current USB driver state.</return>
+              <xclass />
+              <implementation><![CDATA[
+return (usbstate_t)self->state;]]></implementation>
+            </method>
+            <method name="usbGetBinderX" ctype="hal_usb_binder_c *">
+              <brief>Returns the current USB binder.</brief>
+              <return>The current USB binder or @p NULL.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->binder;]]></implementation>
+            </method>
+            <method name="usbGetEventsX" ctype="usbeventflags_t">
+              <brief>Returns the cached USB event flags.</brief>
+              <return>The current cached event flags.</return>
+              <xclass />
+              <implementation><![CDATA[
+return self->events;]]></implementation>
+            </method>
+            <method name="usbGetAndClearEventsX" ctype="usbeventflags_t">
+              <brief>Gets and clears cached USB event flags.</brief>
+              <param name="mask" ctype="usbeventflags_t" dir="in">
+                Mask of events to be returned and cleared.
+              </param>
+              <return>The selected pending event flags.</return>
+              <xclass />
+              <implementation><![CDATA[
+usbeventflags_t flags;
+syssts_t sts;
+
+sts = osalSysGetStatusAndLockX();
+flags = self->events & mask;
+self->events &= ~mask;
+osalSysRestoreStatusX(sts);
+
+return flags;]]></implementation>
+            </method>
+            <method name="usbGetFrameNumberX" ctype="uint16_t">
+              <brief>Returns the current USB frame number.</brief>
+              <return>The current USB frame number.</return>
+              <xclass />
+              <implementation><![CDATA[
+(void)self;
+return usb_lld_get_frame_number(self);]]></implementation>
+            </method>
+            <method name="usbGetReceiveTransactionSizeX" ctype="size_t">
+              <brief>Returns the received size of the last OUT transaction.</brief>
+              <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+              <return>The received size.</return>
+              <xclass />
+              <implementation><![CDATA[
+return usb_lld_get_transaction_size(self, ep);]]></implementation>
+            </method>
+          </inline>
+          <override>
+            <method shortname="start">
+              <implementation><![CDATA[
+msg_t msg;
+unsigned i;
+
+if (config != NULL) {
+  self->config = __usb_setcfg_impl(self, config);
+  if (self->config == NULL) {
+    return HAL_RET_CONFIG_ERROR;
+  }
+}
+
+self->events        = (usbeventflags_t)0U;
+self->transmitting  = 0U;
+self->receiving     = 0U;
+self->ep0state      = USB_EP0_STP_WAITING;
+self->ep0next       = NULL;
+self->ep0n          = 0U;
+self->ep0endcb      = NULL;
+self->ep0thread     = NULL;
+self->ep0seq        = 0U;
+self->ep0rseq       = 0U;
+self->ep0setup      = 0U;
+self->ep0reset      = 0U;
+self->status        = 0U;
+self->address       = 0U;
+self->configuration = 0U;
+self->saved_state   = HAL_DRV_STATE_STOP;
+for (i = 0U; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+  self->epc[i] = NULL;
+}
+
+msg = usb_lld_start(self);
+if (msg != HAL_RET_SUCCESS) {
+  self->config = NULL;
+}
+
+return msg;]]></implementation>
+            </method>
+            <method shortname="stop">
+              <implementation><![CDATA[
+unsigned i;
+
+usb_lld_stop(self);
+if (self->binder != NULL) {
+  usbBinderUnbind(self->binder);
+  self->binder = NULL;
+}
+self->events        = (usbeventflags_t)0U;
+self->transmitting  = 0U;
+self->receiving     = 0U;
+self->ep0state      = USB_EP0_STP_WAITING;
+self->ep0next       = NULL;
+self->ep0n          = 0U;
+self->ep0endcb      = NULL;
+self->ep0thread     = NULL;
+self->ep0seq        = 0U;
+self->ep0rseq       = 0U;
+self->ep0setup      = 0U;
+self->ep0reset      = 0U;
+self->status        = 0U;
+self->address       = 0U;
+self->configuration = 0U;
+self->saved_state   = HAL_DRV_STATE_STOP;
+for (i = 0U; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+#if USB_USE_SYNCHRONIZATION == TRUE
+  if (self->epc[i] != NULL) {
+    if (self->epc[i]->in_state != NULL) {
+      osalThreadResumeI(&self->epc[i]->in_state->thread, MSG_RESET);
+    }
+    if (self->epc[i]->out_state != NULL) {
+      osalThreadResumeI(&self->epc[i]->out_state->thread, MSG_RESET);
+    }
+  }
+#endif
+  self->epc[i] = NULL;
+}]]></implementation>
+            </method>
+            <method shortname="setcfg">
+              <implementation><![CDATA[
+if ((self->state == USB_SELECTED) ||
+    (self->state == USB_ACTIVE) ||
+    (self->state == USB_SUSPENDED)) {
+  return NULL;
+}
+
+return (const void *)usb_lld_setcfg(self,
+                                    (const hal_usb_config_t *)config);]]></implementation>
+            </method>
+            <method shortname="selcfg">
+              <implementation><![CDATA[
+if ((self->state == USB_SELECTED) ||
+    (self->state == USB_ACTIVE) ||
+    (self->state == USB_SUSPENDED)) {
+  return NULL;
+}
+
+return (const void *)usb_lld_selcfg(self, cfgnum);]]></implementation>
+            </method>
+          </override>
+        </methods>
+      </class>
+    </types>
+    <functions>
+      <function name="usbServiceBind" ctype="msg_t">
+        <brief>Binds a USB service to a USB binder.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <param name="binderp" ctype="hal_usb_binder_c *" dir="in">
+          Binder owning the service.
+        </param>
+        <return>The operation status.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+msg_t msg;
+
+osalDbgCheck((self != NULL) && (binderp != NULL));
+osalDbgAssert(self->binder == NULL, "already bound");
+
+self->binder = (struct hal_usb_binder *)binderp;
+msg = usbServiceOnBind(self, (struct hal_usb_binder *)binderp);
+if (msg != HAL_RET_SUCCESS) {
+  self->binder = NULL;
+}
+
+return msg;]]></implementation>
+      </function>
+      <function name="usbServiceUnbind" ctype="void">
+        <brief>Unbinds a USB service from its binder.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <api />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheck(self != NULL);
+
+usbServiceOnUnbind(self);
+self->binder = NULL;]]></implementation>
+      </function>
+      <function name="usbServiceResetI" ctype="void">
+        <brief>Notifies a USB service of a reset event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbServiceOnResetI(self);
+]]></implementation>
+      </function>
+      <function name="usbServiceConfigureI" ctype="void">
+        <brief>Notifies a USB service of a configuration event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbServiceOnConfigureI(self);
+]]></implementation>
+      </function>
+      <function name="usbServiceUnconfigureI" ctype="void">
+        <brief>Notifies a USB service of an unconfigure event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbServiceOnUnconfigureI(self);
+]]></implementation>
+      </function>
+      <function name="usbServiceSuspendI" ctype="void">
+        <brief>Notifies a USB service of a suspend event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbServiceOnSuspendI(self);
+]]></implementation>
+      </function>
+      <function name="usbServiceWakeupI" ctype="void">
+        <brief>Notifies a USB service of a wake-up event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbServiceOnWakeupI(self);
+]]></implementation>
+      </function>
+      <function name="usbServiceSOFI" ctype="void">
+        <brief>Notifies a USB service of a start-of-frame event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbServiceOnSOFI(self);
+]]></implementation>
+      </function>
+      <function name="usbServiceInI" ctype="void">
+        <brief>Notifies a USB service of an IN endpoint event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+usbServiceOnInI(self, ep);
+]]></implementation>
+      </function>
+      <function name="usbServiceOutI" ctype="void">
+        <brief>Notifies a USB service of an OUT endpoint event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+usbServiceOnOutI(self, ep);
+]]></implementation>
+      </function>
+      <function name="usbServiceSetup" ctype="msg_t">
+        <brief>Dispatches an endpoint-zero request to a USB service.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <param name="handledp" ctype="bool *" dir="out">
+          Handled flag.
+        </param>
+        <return>The operation status.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheck((self != NULL) && (handledp != NULL));
+
+return usbServiceOnSetup(self, handledp);]]></implementation>
+      </function>
+      <function name="usbBinderBind" ctype="msg_t">
+        <brief>Binds a USB binder to a USB driver.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="in">
+          USB driver instance.
+        </param>
+        <return>The operation status.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+hal_usb_service_c *servicep;
+msg_t msg;
+
+osalDbgCheck((self != NULL) && (usbp != NULL));
+osalDbgAssert(self->usbp == NULL, "already bound");
+
+self->usbp = usbp;
+msg = usbBinderOnBind(self, usbp);
+if (msg != HAL_RET_SUCCESS) {
+  self->usbp = NULL;
+  return msg;
+}
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  msg = usbServiceBind(servicep, self);
+  if (msg != HAL_RET_SUCCESS) {
+    hal_usb_service_c *sp;
+
+    for (sp = self->services; sp != servicep; sp = sp->next) {
+      usbServiceUnbind(sp);
+    }
+    usbBinderOnUnbind(self);
+    self->usbp = NULL;
+    return msg;
+  }
+}
+
+return HAL_RET_SUCCESS;]]></implementation>
+      </function>
+      <function name="usbBinderUnbind" ctype="void">
+        <brief>Unbinds a USB binder from its USB driver.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <api />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+hal_usb_service_c *servicep;
+
+osalDbgCheck(self != NULL);
+
+for (servicep = self->services; servicep != NULL; servicep = servicep->next) {
+  if (usbServiceGetBinderX(servicep) == self) {
+    usbServiceUnbind(servicep);
+  }
+}
+
+usbBinderOnUnbind(self);
+self->usbp = NULL;]]></implementation>
+      </function>
+      <function name="usbBinderRegisterService" ctype="msg_t">
+        <brief>Registers a USB service on a binder.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="servicep" ctype="hal_usb_service_c *" dir="in">
+          Service to be registered.
+        </param>
+        <return>The operation status.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+hal_usb_service_c *sp;
+
+osalDbgCheck((self != NULL) && (servicep != NULL));
+osalDbgAssert(self->usbp == NULL, "registration while bound");
+osalDbgAssert(usbServiceGetBinderX(servicep) == NULL, "service already bound");
+osalDbgAssert((servicep->next == NULL) && (servicep->prev == NULL),
+              "service already linked");
+osalDbgAssert(usbServiceGetInfoX(servicep) != NULL, "missing service info");
+
+for (sp = self->services; sp != NULL; sp = sp->next) {
+  osalDbgAssert(sp != servicep, "service already registered");
+  if (usbbnd_service_conflict(usbServiceGetInfoX(servicep),
+                              usbServiceGetInfoX(sp))) {
+    return HAL_RET_INV_STATE;
+  }
+}
+
+servicep->prev = self->service_last;
+servicep->next = NULL;
+if (self->service_last != NULL) {
+  self->service_last->next = servicep;
+}
+else {
+  self->services = servicep;
+}
+self->service_last = servicep;
+self->services_num++;
+
+return HAL_RET_SUCCESS;]]></implementation>
+      </function>
+      <function name="usbBinderUnregisterService" ctype="msg_t">
+        <brief>Unregisters a USB service from a binder.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="servicep" ctype="hal_usb_service_c *" dir="in">
+          Service to be unregistered.
+        </param>
+        <return>The operation status.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+hal_usb_service_c *sp;
+
+osalDbgCheck((self != NULL) && (servicep != NULL));
+osalDbgAssert(self->usbp == NULL, "unregistration while bound");
+
+for (sp = self->services; sp != NULL; sp = sp->next) {
+  if (sp == servicep) {
+    break;
+  }
+}
+if (sp == NULL) {
+  return HAL_RET_INV_STATE;
+}
+
+if (servicep->prev != NULL) {
+  servicep->prev->next = servicep->next;
+}
+else {
+  self->services = servicep->next;
+}
+if (servicep->next != NULL) {
+  servicep->next->prev = servicep->prev;
+}
+else {
+  self->service_last = servicep->prev;
+}
+servicep->next = NULL;
+servicep->prev = NULL;
+self->services_num--;
+
+return HAL_RET_SUCCESS;]]></implementation>
+      </function>
+      <function name="usbBinderGetNextServiceX" ctype="hal_usb_service_c *">
+        <brief>Returns the next registered service.</brief>
+        <param name="ip" ctype="void *" dir="in">
+          Pointer to a @p hal_usb_service_c instance.
+        </param>
+        <return>Pointer to the next service or @p NULL.</return>
+        <xclass />
+        <implementation><![CDATA[
+hal_usb_service_c *self = (hal_usb_service_c *)ip;
+
+osalDbgCheck(self != NULL);
+
+return self->next;]]></implementation>
+      </function>
+      <function name="usbBinderGetDescriptor" ctype="const usb_descriptor_t *">
+        <brief>Requests a descriptor from a USB binder.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="dtype" ctype="uint8_t" dir="in">Descriptor type.</param>
+        <param name="dindex" ctype="uint8_t" dir="in">Descriptor index.</param>
+        <param name="lang" ctype="uint16_t" dir="in">Language identifier.</param>
+        <return>Descriptor lookup result.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheck(self != NULL);
+
+return usbBinderOnGetDescriptor(self, dtype, dindex, lang);]]></implementation>
+      </function>
+      <function name="usbBinderResetI" ctype="void">
+        <brief>Notifies a USB binder of a reset event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbBinderOnResetI(self);
+]]></implementation>
+      </function>
+      <function name="usbBinderConfigureI" ctype="void">
+        <brief>Notifies a USB binder of a configuration event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbBinderOnConfigureI(self);
+]]></implementation>
+      </function>
+      <function name="usbBinderUnconfigureI" ctype="void">
+        <brief>Notifies a USB binder of an unconfigure event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbBinderOnUnconfigureI(self);
+]]></implementation>
+      </function>
+      <function name="usbBinderSuspendI" ctype="void">
+        <brief>Notifies a USB binder of a suspend event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbBinderOnSuspendI(self);
+]]></implementation>
+      </function>
+      <function name="usbBinderWakeupI" ctype="void">
+        <brief>Notifies a USB binder of a wake-up event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbBinderOnWakeupI(self);
+]]></implementation>
+      </function>
+      <function name="usbBinderSOFI" ctype="void">
+        <brief>Notifies a USB binder of a start-of-frame event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck(self != NULL);
+usbBinderOnSOFI(self);
+]]></implementation>
+      </function>
+      <function name="usbBinderInI" ctype="void">
+        <brief>Notifies a USB binder of an IN endpoint event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+usbBinderOnInI(self, ep);
+]]></implementation>
+      </function>
+      <function name="usbBinderOutI" ctype="void">
+        <brief>Notifies a USB binder of an OUT endpoint event.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <iclass />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheckClassI();
+osalDbgCheck((self != NULL) && (ep <= (usbep_t)USB_MAX_ENDPOINTS));
+usbBinderOnOutI(self, ep);
+]]></implementation>
+      </function>
+      <function name="usbBinderSetup" ctype="msg_t">
+        <brief>Dispatches an endpoint-zero request through a USB binder.</brief>
+        <param name="ip" ctype="void *" dir="both">
+          Pointer to a @p hal_usb_binder_c instance.
+        </param>
+        <param name="handledp" ctype="bool *" dir="out">
+          Handled flag.
+        </param>
+        <return>The operation status.</return>
+        <api />
+        <implementation><![CDATA[
+hal_usb_binder_c *self = (hal_usb_binder_c *)ip;
+
+osalDbgCheck((self != NULL) && (handledp != NULL));
+
+return usbBinderOnSetup(self, handledp);]]></implementation>
+      </function>
+      <function name="usbInit" ctype="void">
+        <brief>USB Driver initialization.</brief>
+        <init />
+        <implementation><![CDATA[
+usb_lld_init();]]></implementation>
+      </function>
+      <function name="_usb_reset" ctype="void">
+        <brief>Common USB reset handler invoked by the LLD.</brief>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both">
+          USB driver instance.
+        </param>
+        <notapi />
+        <implementation><![CDATA[
+unsigned i;
+
+usbp->state         = HAL_DRV_STATE_READY;
+usbp->status        = 0U;
+usbp->address       = 0U;
+usbp->configuration = 0U;
+usbp->ep0n          = 0U;
+usbp->transmitting  = 0U;
+usbp->receiving     = 0U;
+for (i = 0U; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+#if USB_USE_SYNCHRONIZATION == TRUE
+  if (usbp->epc[i] != NULL) {
+    osalSysLockFromISR();
+    if (usbp->epc[i]->in_state != NULL) {
+      osalThreadResumeI(&usbp->epc[i]->in_state->thread, MSG_RESET);
+    }
+    if (usbp->epc[i]->out_state != NULL) {
+      osalThreadResumeI(&usbp->epc[i]->out_state->thread, MSG_RESET);
+    }
+    osalSysUnlockFromISR();
+  }
+#endif
+  usbp->epc[i] = NULL;
+}
+
+  usbp->ep0state = USB_EP0_STP_WAITING;
+  usbp->ep0setup = 0U;
+  usbp->ep0reset = 0U;
+  usb_lld_reset(usbp);
+  osalSysLockFromISR();
+  if (usbp->binder != NULL) {
+    usbBinderResetI(usbp->binder);
+  }
+  ep0_signal_resetI(usbp);
+  osalSysUnlockFromISR();
+  _usb_isr_invoke_event_cb(usbp, USB_FLAGS_RESET);]]></implementation>
+      </function>
+      <function name="_usb_suspend" ctype="void">
+        <brief>Common USB suspend handler invoked by the LLD.</brief>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both">
+          USB driver instance.
+        </param>
+        <notapi />
+        <implementation><![CDATA[
+if (usbp->state != USB_SUSPENDED) {
+  unsigned i;
+
+  usbp->saved_state = usbp->state;
+  usbp->state = USB_SUSPENDED;
+  _usb_isr_invoke_event_cb(usbp, USB_FLAGS_SUSPEND);
+  usbp->transmitting = 0U;
+  usbp->receiving = 0U;
+#if USB_USE_SYNCHRONIZATION == TRUE
+  for (i = 0U; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+    if (usbp->epc[i] != NULL) {
+      osalSysLockFromISR();
+      if (usbp->epc[i]->in_state != NULL) {
+        osalThreadResumeI(&usbp->epc[i]->in_state->thread, MSG_RESET);
+      }
+      if (usbp->epc[i]->out_state != NULL) {
+        osalThreadResumeI(&usbp->epc[i]->out_state->thread, MSG_RESET);
+      }
+      osalSysUnlockFromISR();
+    }
+  }
+#endif
+  osalSysLockFromISR();
+  if (usbp->binder != NULL) {
+    usbBinderSuspendI(usbp->binder);
+  }
+  ep0_signal_resetI(usbp);
+  osalSysUnlockFromISR();
+}]]></implementation>
+      </function>
+      <function name="_usb_wakeup" ctype="void">
+        <brief>Common USB wake-up handler invoked by the LLD.</brief>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both">
+          USB driver instance.
+        </param>
+        <notapi />
+        <implementation><![CDATA[
+if (usbp->state == USB_SUSPENDED) {
+  usbp->state = usbp->saved_state;
+  osalSysLockFromISR();
+  if (usbp->binder != NULL) {
+    usbBinderWakeupI(usbp->binder);
+  }
+  osalSysUnlockFromISR();
+  _usb_isr_invoke_event_cb(usbp, USB_FLAGS_WAKEUP);
+}]]></implementation>
+      </function>
+      <function name="_usb_ep0setup" ctype="void">
+        <brief>Common endpoint-zero SETUP handler invoked by the LLD.</brief>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both">
+          USB driver instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <notapi />
+        <implementation><![CDATA[
+msg_t msg = MSG_OK;
+
+osalDbgAssert(ep == 0U, "EP not zero");
+
+if (usbp->ep0state != USB_EP0_STP_WAITING) {
+  setup_reset(usbp);
+  msg = MSG_RESET;
+}
+
+osalSysLockFromISR();
+usbReadSetupI(usbp, 0U, usbp->setup);
+ep0_signal_setupI(usbp, msg);
+osalSysUnlockFromISR();]]></implementation>
+      </function>
+      <function name="_usb_ep0in" ctype="void">
+        <brief>Common endpoint-zero IN handler invoked by the LLD.</brief>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both">
+          USB driver instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <notapi />
+        <implementation><![CDATA[
+size_t max;
+
+osalDbgAssert(ep == 0U, "EP not zero");
+
+switch (usbp->ep0state) {
+case USB_EP0_IN_TX:
+  max = (size_t)get_hword(&usbp->setup[6]);
+  if ((usbp->ep0n < max) &&
+      ((usbp->ep0n % usbp->epc[0]->in_maxsize) == 0U)) {
+    osalSysLockFromISR();
+    usbStartTransmitI(usbp, 0U, NULL, 0U);
+    osalSysUnlockFromISR();
+    usbp->ep0state = USB_EP0_IN_WAITING_TX0;
+    return;
+  }
+  /* Falls through. */
+case USB_EP0_IN_WAITING_TX0:
+  usbp->ep0state = USB_EP0_OUT_WAITING_STS;
+  osalSysLockFromISR();
+  usbStartReceiveI(usbp, 0U, NULL, 0U);
+  osalSysUnlockFromISR();
+  return;
+case USB_EP0_IN_SENDING_STS:
+  setup_reset(usbp);
+  osalSysLockFromISR();
+  ep0_resume_waiterI(usbp, MSG_OK);
+  osalSysUnlockFromISR();
+  return;
+case USB_EP0_OUT_WAITING_STS:
+  return;
+case USB_EP0_ERROR:
+  setup_error(usbp);
+  osalSysLockFromISR();
+  ep0_signal_resetI(usbp);
+  osalSysUnlockFromISR();
+  return;
+default:
+  osalDbgAssert(false, "EP0 state machine error");
+}]]></implementation>
+      </function>
+      <function name="_usb_ep0out" ctype="void">
+        <brief>Common endpoint-zero OUT handler invoked by the LLD.</brief>
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both">
+          USB driver instance.
+        </param>
+        <param name="ep" ctype="usbep_t" dir="in">Endpoint number.</param>
+        <notapi />
+        <implementation><![CDATA[
+osalDbgAssert(ep == 0U, "EP not zero");
+
+switch (usbp->ep0state) {
+case USB_EP0_OUT_RX:
+  usbp->ep0state = USB_EP0_IN_SENDING_STS;
+  osalSysLockFromISR();
+  usbStartTransmitI(usbp, 0U, NULL, 0U);
+  osalSysUnlockFromISR();
+  return;
+case USB_EP0_OUT_WAITING_STS:
+  if (usbGetReceiveTransactionSizeX(usbp, 0U) != 0U) {
+    break;
+  }
+  setup_reset(usbp);
+  osalSysLockFromISR();
+  ep0_resume_waiterI(usbp, MSG_OK);
+  osalSysUnlockFromISR();
+  return;
+case USB_EP0_IN_TX:
+  return;
+case USB_EP0_ERROR:
+  setup_error(usbp);
+  osalSysLockFromISR();
+  ep0_signal_resetI(usbp);
+  osalSysUnlockFromISR();
+  return;
+default:
+  osalDbgAssert(false, "EP0 state machine error");
+}]]></implementation>
+      </function>
+    </functions>
+  </public>
+  <private>
+    <includes_always>
+      <include style="regular">string.h</include>
+      <include style="regular">hal.h</include>
+    </includes_always>
+    <functions>
+      <function name="get_hword" ctype="uint16_t">
+        <param name="p" ctype="uint8_t *" dir="in"></param>
+        <implementation><![CDATA[
+uint16_t hw;
+
+hw  = (uint16_t)*p++;
+hw |= (uint16_t)*p << 8U;
+
+return hw;]]></implementation>
+      </function>
+      <function name="usbbnd_if_conflict" ctype="bool">
+        <param name="ap" ctype="const hal_usb_service_info_t *" dir="in"></param>
+        <param name="bp" ctype="const hal_usb_service_info_t *" dir="in"></param>
+        <implementation><![CDATA[
+unsigned abase, alimit, bbase, blimit;
+
+if ((ap->if_count == 0U) || (bp->if_count == 0U)) {
+  return false;
+}
+
+abase  = (unsigned)ap->if_base;
+alimit = abase + (unsigned)ap->if_count;
+bbase  = (unsigned)bp->if_base;
+blimit = bbase + (unsigned)bp->if_count;
+
+return (abase < blimit) && (bbase < alimit);]]></implementation>
+      </function>
+      <function name="usbbnd_service_conflict" ctype="bool">
+        <param name="ap" ctype="const hal_usb_service_info_t *" dir="in"></param>
+        <param name="bp" ctype="const hal_usb_service_info_t *" dir="in"></param>
+        <implementation><![CDATA[
+if (usbbnd_if_conflict(ap, bp)) {
+  return true;
+}
+if ((ap->in_ep_mask & bp->in_ep_mask) != 0U) {
+  return true;
+}
+if ((ap->out_ep_mask & bp->out_ep_mask) != 0U) {
+  return true;
+}
+
+return false;]]></implementation>
+      </function>
+      <function name="usb_invoke_event_cb" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <param name="flags" ctype="usbeventflags_t" dir="in"></param>
+        <implementation><![CDATA[
+usbp->events |= flags;
+]]></implementation>
+      </function>
+      <function name="setup_reset" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <implementation><![CDATA[
+usbp->receiving &= ~1U;
+usbp->transmitting &= ~1U;
+usbp->ep0n = 0U;
+usbp->ep0state = USB_EP0_STP_WAITING;]]></implementation>
+      </function>
+      <function name="setup_error" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <implementation><![CDATA[
+usb_lld_stall_in(usbp, 0U);
+usb_lld_stall_out(usbp, 0U);
+usb_invoke_event_cb(usbp, USB_FLAGS_STALLED);
+usbp->receiving &= ~1U;
+usbp->transmitting &= ~1U;
+usbp->ep0n = 0U;
+usbp->ep0state = USB_EP0_ERROR;]]></implementation>
+      </function>
+      <function name="ep0_resume_waiterI" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <param name="msg" ctype="msg_t" dir="in"></param>
+        <implementation><![CDATA[
+osalThreadResumeI(&usbp->ep0thread, msg);]]></implementation>
+      </function>
+      <function name="ep0_signal_resetI" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <implementation><![CDATA[
+usbp->ep0setup = 0U;
+usbp->ep0reset = 1U;
+usbp->ep0seq++;
+ep0_resume_waiterI(usbp, MSG_RESET);]]></implementation>
+      </function>
+      <function name="ep0_signal_setupI" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <param name="msg" ctype="msg_t" dir="in"></param>
+        <implementation><![CDATA[
+usbp->ep0setup = 1U;
+usbp->ep0reset = 0U;
+usbp->ep0seq++;
+ep0_resume_waiterI(usbp, msg);]]></implementation>
+      </function>
+      <function name="set_address_thread" ctype="void">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <implementation><![CDATA[
+usbp->address = usbp->setup[2];
+usb_lld_set_address(usbp);
+usb_invoke_event_cb(usbp, USB_FLAGS_ADDRESS);
+usbp->state = USB_SELECTED;]]></implementation>
+      </function>
+      <function name="ep0_reply_or_ack" ctype="msg_t">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <param name="buf" ctype="const uint8_t *" dir="in"></param>
+        <param name="n" ctype="size_t" dir="in"></param>
+        <implementation><![CDATA[
+msg_t msg;
+size_t max;
+
+osalSysLock();
+if ((usbp->state == HAL_DRV_STATE_STOP) || (usbp->ep0rseq != usbp->ep0seq)) {
+  osalSysUnlock();
+  return MSG_RESET;
+}
+
+max = (size_t)get_hword(&usbp->setup[6]);
+if (n > max) {
+  n = max;
+}
+
+usbp->ep0next = (uint8_t *)buf;
+usbp->ep0n = n;
+if (n != 0U) {
+  usbp->ep0state = USB_EP0_IN_TX;
+  usbStartTransmitI(usbp, 0U, buf, n);
+}
+else {
+  usbp->ep0state = USB_EP0_OUT_WAITING_STS;
+  usbStartReceiveI(usbp, 0U, NULL, 0U);
+}
+
+msg = osalThreadSuspendS(&usbp->ep0thread);
+if (usbp->ep0rseq != usbp->ep0seq) {
+  msg = MSG_RESET;
+}
+osalSysUnlock();
+
+return msg;]]></implementation>
+      </function>
+      <function name="ep0_receive_or_status" ctype="msg_t">
+        <param name="usbp" ctype="hal_usb_driver_c *" dir="both"></param>
+        <param name="buf" ctype="uint8_t *" dir="out"></param>
+        <param name="n" ctype="size_t" dir="in"></param>
+        <implementation><![CDATA[
+msg_t msg;
+size_t max;
+
+osalSysLock();
+if ((usbp->state == HAL_DRV_STATE_STOP) || (usbp->ep0rseq != usbp->ep0seq)) {
+  osalSysUnlock();
+  return MSG_RESET;
+}
+
+max = (size_t)get_hword(&usbp->setup[6]);
+if (n > max) {
+  n = max;
+}
+
+usbp->ep0next = buf;
+usbp->ep0n = n;
+if (n != 0U) {
+  usbp->ep0state = USB_EP0_OUT_RX;
+  usbStartReceiveI(usbp, 0U, buf, n);
+}
+else {
+  usbp->ep0state = USB_EP0_IN_SENDING_STS;
+  usbStartTransmitI(usbp, 0U, NULL, 0U);
+}
+
+msg = osalThreadSuspendS(&usbp->ep0thread);
+if (usbp->ep0rseq != usbp->ep0seq) {
+  msg = MSG_RESET;
+}
+osalSysUnlock();
+
+return msg;]]></implementation>
+      </function>
+      <verbatim><![CDATA[
+static const uint8_t zero_status[] = {0x00U, 0x00U};
+static const uint8_t active_status[] = {0x00U, 0x00U};
+static const uint8_t halted_status[] = {0x01U, 0x00U};]]></verbatim>
+    </functions>
+  </private>
+</module>
