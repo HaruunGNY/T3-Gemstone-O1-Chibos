@@ -1,4 +1,4 @@
-# T3 Gemstone O1 — ChibiOS Üzerinde ArduCopter Kurulumu
+# T3 Gemstone O1 — ChibiOS Üzerinde ArduCopter
 
 Bu doküman, T3 Gemstone O1 kartında gerçek ArduCopter uçuş kontrolcüsünü,
 Linux yerine doğrudan kartın **R5F** çekirdeğinde, **ChibiOS** adlı bir
@@ -12,24 +12,28 @@ bir sonuç.
 
 ## İçindekiler
 
-1. [Bu proje ne, neden var](#1-bu-proje-ne-neden-var)
-2. [Kavramlar sözlüğü](#2-kavramlar-sözlüğü-önce-bunu-okuyun)
-3. [Güvenlik uyarısı](#3-güvenlik-uyarısı-önce-okuyun)
-4. [Gerekli donanım](#4-gerekli-donanım)
-5. [Host bilgisayarda yazılım kurulumu](#5-host-bilgisayarda-yazılım-kurulumu)
-6. [Depoyu edinme](#6-depoyu-edinme)
-7. [Derleme](#7-derleme)
-8. [Karta ilk deploy (test amaçlı, kalıcı değil)](#8-karta-ilk-deploy-test-amaçlı-kalıcı-değil)
-9. [Kalıcı hale getirme](#9-kalıcı-hale-getirme)
-10. [QGroundControl bağlantısı](#10-qgroundcontrol-bağlantısı)
-11. [Doğrulama listesi](#11-doğrulama-listesi)
-12. [Bilinen kısıtlamalar](#12-bilinen-kısıtlamalar)
-13. [Sorun giderme](#13-sorun-giderme)
-14. [Depo yapısı](#14-depo-yapısı)
+1. [Genel Bakış](#1-genel-bakış)
+2. [Kavramlar Sözlüğü](#2-kavramlar-sözlüğü)
+3. [Güvenlik Uyarısı](#3-güvenlik-uyarısı)
+4. [Donanım Gereksinimleri](#4-donanım-gereksinimleri)
+5. [Kurulum](#5-kurulum)
+   - 5.1. [Host Bilgisayarda Yazılım Kurulumu](#51-host-bilgisayarda-yazılım-kurulumu)
+   - 5.2. [Depoyu Edinme](#52-depoyu-edinme)
+   - 5.3. [Derleme](#53-derleme)
+   - 5.4. [Karta İlk Deploy (Test Amaçlı, Kalıcı Değil)](#54-karta-ilk-deploy-test-amaçlı-kalıcı-değil)
+   - 5.5. [Kalıcı Hale Getirme](#55-kalıcı-hale-getirme)
+     - 5.5.1. [3 Adet Kart-Üzeri systemd Servisi](#551-3-adet-kart-üzeri-systemd-servisi)
+6. [Yapılandırma](#6-yapılandırma)
+7. [Kullanım](#7-kullanım)
+   - 7.1. [QGroundControl Bağlantısı](#71-qgroundcontrol-bağlantısı)
+   - 7.2. [Doğrulama Listesi](#72-doğrulama-listesi)
+8. [Bilinen Kısıtlamalar](#8-bilinen-kısıtlamalar)
+9. [Sorun Giderme](#9-sorun-giderme)
+10. [Depo Yapısı](#10-depo-yapısı)
 
 ---
 
-## 1) Bu proje ne, neden var
+## 1. Genel Bakış
 
 T3 Gemstone O1 kartının içinde **iki farklı işlemci çekirdek ailesi** var,
 aynı çip üzerinde ama birbirinden bağımsız çalışıyorlar:
@@ -62,13 +66,15 @@ işletim sistemi) üzerinde çalışıyor. Linux'un görevi bu noktadan sonra sa
 **Bu neden yapılıyor?** R5F, Linux'a göre çok daha az gecikmeli/daha
 öngörülebilir zamanlama sunar (gerçek-zamanlı = "her döngü tam olarak ne
 zaman çalışacağı garanti edilebilir" demek) — uçuş kontrolü gibi zamanlamaya
-duyarlı işler için ilgi çekici bir alternatif. Bu, T3 ekibinden bağımsız bir
-geliştiricinin yaptığı, henüz resmi olarak T3'e katılmamış
-bir deneysel çalışma.
+duyarlı işler için ilgi çekici bir alternatif.
+
+> **Not:** Bu, T3 ekibinden bağımsız bir geliştiricinin yaptığı, henüz resmi
+> olarak T3'e katılmamış bir deneysel çalışmadır — [docs.t3gemstone.org](https://docs.t3gemstone.org)'un
+> resmi bir parçası değildir.
 
 ---
 
-## 2) Kavramlar sözlüğü (önce bunu okuyun)
+## 2. Kavramlar Sözlüğü
 
 | Terim | Ne demek |
 |---|---|
@@ -91,22 +97,23 @@ bir deneysel çalışma.
 
 ---
 
-## 3) GÜVENLİK UYARISI (önce okuyun)
+## 3. Güvenlik Uyarısı
 
-- **Pervaneleri (propeller) çıkarmadan hiçbir arm/motor testi yapmayın.**
-  Bu firmware'de arm olduğunda motorlar gerçekten dönebilir.
-- Bu kurulumda **GPS çalışmıyor** (bkz. [Bölüm 12](#12-bilinen-kısıtlamalar)) —
-  yani Auto/Guided/RTL/PosHold gibi GPS gerektiren modlar **yoktur**. Sadece
-  Stabilize/Acro gibi GPS'siz modlar kullanılabilir. RTL (eve dön) gibi bir
-  "kurtarma" modu olmadığını bilerek test edin.
-- Batarya voltaj/akım telemetrisi yok — bataryanın ne durumda olduğunu
-  yazılım size söylemez, gözle/elle takip edin.
-- İlk defa deploy ederken/test ederken kart bir tezgahta, pervanesiz,
-  sabitlenmiş halde olmalı.
+> **⚠️ Başlamadan önce okuyun**
+> - **Pervaneleri (propeller) çıkarmadan hiçbir arm/motor testi yapmayın.**
+>   Bu firmware'de arm olduğunda motorlar gerçekten dönebilir.
+> - Bu kurulumda **GPS çalışmıyor** (bkz. [Bölüm 8](#8-bilinen-kısıtlamalar)) —
+>   yani Auto/Guided/RTL/PosHold gibi GPS gerektiren modlar **yoktur**. Sadece
+>   Stabilize/Acro gibi GPS'siz modlar kullanılabilir. RTL (eve dön) gibi bir
+>   "kurtarma" modu olmadığını bilerek test edin.
+> - Batarya voltaj/akım telemetrisi yok — bataryanın ne durumda olduğunu
+>   yazılım size söylemez, gözle/elle takip edin.
+> - İlk defa deploy ederken/test ederken kart bir tezgahta, pervanesiz,
+>   sabitlenmiş halde olmalı.
 
 ---
 
-## 4) Gerekli donanım
+## 4. Donanım Gereksinimleri
 
 - Bir **T3 Gemstone O1** kartı (üzerinde T3'ün resmi işletim sistemi kurulu
   ve çalışır halde — kartı sıfırdan görüntü yazma/imajlama bu deponun
@@ -126,14 +133,35 @@ bir deneysel çalışma.
 
 ---
 
-## 5) Host bilgisayarda yazılım kurulumu
+## 5. Kurulum
+
+Kart bilgileri (hepsi T3'ün resmi imajının varsayılanı):
+
+- Adres: `192.168.7.2` (USB-Ethernet debug kablosu üzerinden)
+- Kullanıcı: `gemstone`
+- SSH parolası: `gem`
+- sudo parolası: `gem`
+
+Aşağıdaki komut bloklarında satır başındaki `ubuntu@host:~$` host
+bilgisayarınızda, `gemstone@t3-gem-o1:~$` ise **kartta açık tuttuğunuz bir SSH
+oturumunda** çalıştırıldığını gösterir. Karta bağlanmak için:
+
+```bash
+ubuntu@host:~$ ssh gemstone@192.168.7.2   # parola: gem
+```
+
+Bu oturumu açık bırakın — kart tarafındaki komutları tek tek `ssh`/`sshpass`
+ile göndermek yerine, doğrudan o terminale yazacaksınız; `sudo` parola
+sorduğunda elle `gem` yazın.
+
+### 5.1. Host Bilgisayarda Yazılım Kurulumu
 
 Aşağıdakileri host bilgisayarınıza (karta değil!) kurun:
 
-```sh
-sudo apt update
-sudo apt install -y git make python3 python3-pip sshpass ssh gcc-arm-none-eabi
-pip3 install empy==3.3.4
+```bash
+ubuntu@host:~$ sudo apt update
+ubuntu@host:~$ sudo apt install -y git make python3 python3-pip sshpass ssh gcc-arm-none-eabi
+ubuntu@host:~$ pip3 install empy==3.3.4
 ```
 
 Neden bunlar:
@@ -143,31 +171,27 @@ Neden bunlar:
 - `python3`, `python3-pip` — ArduPilot'un `waf` derleme sistemi Python
   tabanlı.
 - `empy` — waf'ın derleme sırasında kullandığı bir şablon (template) kütüphanesi.
-  `pip install empy==3.3.4` ile kurulmalı; sürüm önemli, farklı bir sürüm
-  derleme hatası verebilir.
-- `sshpass` — dosya kopyalarken (`scp`) kart parolasını otomatik geçmek
-  için (aşağıdaki `scp` komutları bunu kullanıyor). Kart üzerinde komut
-  çalıştırmak için ise bir kez `ssh gemstone@192.168.7.2` ile bağlanıp o
-  terminali açık bırakacaksınız — parolayı orada elle bir kez girersiniz.
+- `sshpass` — dosya kopyalarken (`scp`) kart parolasını otomatik geçmek için.
+
+> **Not:** `empy` sürümü önemli — `pip install empy==3.3.4` dışında bir sürüm
+> derleme hatası verebilir.
 
 Kurulumun doğru olduğunu kontrol edin:
 
-```sh
-arm-none-eabi-gcc --version
-python3 -c "import em; print('empy OK')"
+```bash
+ubuntu@host:~$ arm-none-eabi-gcc --version
+ubuntu@host:~$ python3 -c "import em; print('empy OK')"
 ```
 
 İkisi de hatasız bir şey yazdırmalı.
 
----
-
-## 6) Depoyu edinme
+### 5.2. Depoyu Edinme
 
 Bu depoyu klonlayıp klasörüne girin:
 
-```sh
-git clone https://github.com/HaruunGNY/T3-Gemstone-O1-Chibos.git
-cd T3-Gemstone-O1-Chibos
+```bash
+ubuntu@host:~$ git clone https://github.com/HaruunGNY/T3-Gemstone-O1-Chibos.git
+ubuntu@host:~$ cd T3-Gemstone-O1-Chibos
 ```
 
 Depo, aslen ayrı iki proje olan şu ikisini zaten içinde
@@ -186,15 +210,13 @@ bulunmayan, bu proje için özel yazılmış parçalar var: kart üzerinde
 ve gerekli systemd servis tanımları. Bunlara ilerleyen bölümlerde
 değinilecek.
 
----
-
-## 7) Derleme
+### 5.3. Derleme
 
 Depo klasörünün içindeyken:
 
-```sh
-python3 waf configure --board GemstoneO1R5F
-python3 waf copter
+```bash
+ubuntu@host:~$ python3 waf configure --board GemstoneO1R5F
+ubuntu@host:~$ python3 waf copter
 ```
 
 Ne oluyor: ilk komut derleme ayarlarını R5F/ChibiOS hedefine göre
@@ -202,9 +224,9 @@ yapılandırıyor (ChibiOS portunun konumunu otomatik buluyor, siz bir şey
 ayarlamanıza gerek yok). İkinci komut asıl derlemeyi yapıp ArduCopter'ı
 üretiyor.
 
-**İlk çalıştırmada internet gerekir** — waf kendi alt bileşenini
-(`modules/waf`) otomatik indirmeye çalışır. "Tekrar çalıştırın" gibi bir
-mesaj görürseniz komutu tekrar çalıştırmanız yeterli.
+> **Not:** İlk çalıştırmada internet gerekir — waf kendi alt bileşenini
+> (`modules/waf`) otomatik indirmeye çalışır. "Tekrar çalıştırın" gibi bir
+> mesaj görürseniz komutu tekrar çalıştırmanız yeterli.
 
 Başarılı bir derleme sonunda şu dosya oluşur:
 
@@ -214,44 +236,25 @@ build/GemstoneO1R5F/bin/arducopter
 
 Bu, R5F'e yükleyeceğiniz asıl program dosyasıdır (bir ELF dosyası).
 
----
+### 5.4. Karta İlk Deploy (Test Amaçlı, Kalıcı Değil)
 
-## 8) Karta ilk deploy (test amaçlı, kalıcı değil)
+Kartın açık ve USB-C ile host bilgisayara bağlı olduğundan emin olun.
 
-Kart bilgileri (hepsi T3'ün resmi imajının varsayılanı):
+Host tarafında, derlenen dosyayı karta kopyalayın:
 
-- Adres: `192.168.7.2` (USB-Ethernet debug kablosu üzerinden)
-- Kullanıcı: `gemstone`
-- SSH parolası: `gem`
-- sudo parolası: `gem`
-
-Kartı USB-C kablo ile host bilgisayara bağlayın, kartın açık olduğundan
-emin olun. Bundan sonra iki terminal kullanacaksınız.
-
-**Host terminali** — derlenen dosyayı karta kopyalayın:
-
-```sh
-sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
+```bash
+ubuntu@host:~$ sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
 ```
 
-**Kart terminali** — karta bir kez bağlanın ve bu oturumu açık bırakın:
+Kart tarafında (Bölüm 5'te açtığınız SSH oturumunda):
 
-```sh
-ssh gemstone@192.168.7.2   # parola: gem
-```
-
-Bundan sonraki tüm kart-tarafı komutları (bu bölümde ve devamındaki
-bölümlerde) artık o açık kalan terminalde çalıştıracaksınız — her komut
-için ayrıca `ssh`/`sshpass` yazmanıza gerek yok, `sudo` parola sorduğunda
-elle `gem` yazın:
-
-```sh
-sudo systemctl stop arducopter
-sudo sh -c 'echo 4b00000.spi > /sys/bus/platform/drivers/omap2_mcspi/unbind'
-sudo cp /tmp/ap-k3.elf /lib/firmware/ap-k3.elf
-sudo sh -c 'echo stop > /sys/class/remoteproc/remoteproc2/state'
-sudo sh -c 'echo ap-k3.elf > /sys/class/remoteproc/remoteproc2/firmware'
-sudo sh -c 'echo start > /sys/class/remoteproc/remoteproc2/state'
+```bash
+gemstone@t3-gem-o1:~$ sudo systemctl stop arducopter
+gemstone@t3-gem-o1:~$ sudo sh -c 'echo 4b00000.spi > /sys/bus/platform/drivers/omap2_mcspi/unbind'
+gemstone@t3-gem-o1:~$ sudo cp /tmp/ap-k3.elf /lib/firmware/ap-k3.elf
+gemstone@t3-gem-o1:~$ sudo sh -c 'echo stop > /sys/class/remoteproc/remoteproc2/state'
+gemstone@t3-gem-o1:~$ sudo sh -c 'echo ap-k3.elf > /sys/class/remoteproc/remoteproc2/firmware'
+gemstone@t3-gem-o1:~$ sudo sh -c 'echo start > /sys/class/remoteproc/remoteproc2/state'
 ```
 
 Satır satır ne yapıyor:
@@ -262,81 +265,83 @@ Satır satır ne yapıyor:
 3. Dosyayı, remoteproc'un beklediği konuma (`/lib/firmware/`) kopyalar.
 4-6. remoteproc'a "durdur, şu yeni dosyayı yükle, başlat" der.
 
-**ÖNEMLİ KISITLAMA — mutlaka okuyun:** yukarıdaki bloktaki `remoteproc2/state`'e
-`"stop"` yazan komut **sadece R5F o an TI'nın fabrika/stok firmware'ini
-çalıştırıyorsa** düzgün çalışır.
-Bizim kendi (ChibiOS/ArduCopter) firmware'imiz, remoteproc'un "durdur"
-komutu için beklediği özel bir el sıkışma sinyalini (mailbox) henüz
-implement etmiyor. Yani **R5F zaten bizim firmware'imizi çalıştırıyorsa,
-yukarıdaki sıralamayla yeni bir sürüm YÜKLEYEMEZSİNİZ** — önce kartı
-**tamamen reboot etmeniz** gerekir:
+> **⚠️ Uyarı:** yukarıdaki bloktaki `remoteproc2/state`'e `"stop"` yazan komut
+> **sadece R5F o an TI'nın fabrika/stok firmware'ini çalıştırıyorsa** düzgün
+> çalışır. Bizim kendi (ChibiOS/ArduCopter) firmware'imiz, remoteproc'un
+> "durdur" komutu için beklediği özel bir el sıkışma sinyalini (mailbox) henüz
+> implement etmiyor. Yani **R5F zaten bizim firmware'imizi çalıştırıyorsa,
+> yukarıdaki sıralamayla yeni bir sürüm YÜKLEYEMEZSİNİZ** — önce kartı
+> **tamamen reboot etmeniz** gerekir:
+>
+> ```bash
+> gemstone@t3-gem-o1:~$ sudo reboot
+> ```
+>
+> Bu komutu çalıştırdığınız an kart terminaliniz kopar (kart yeniden
+> başlıyor). Birkaç saniye bekleyip tekrar bağlanın (`ubuntu@host:~$ ping 192.168.7.2`
+> ile de kartın geri geldiğini kontrol edebilirsiniz):
+>
+> ```bash
+> ubuntu@host:~$ ssh gemstone@192.168.7.2
+> ```
+>
+> sonra yukarıdaki 6 kart-tarafı komutunu tekrar çalıştırın (dosya zaten
+> `/tmp/ap-k3.elf`'te duruyorsa scp adımını tekrarlamanıza gerek yok). **Yani
+> her kod değişikliğinde döngü şu: reboot → yeniden bağlan → yukarıdaki 6
+> komut.**
 
-```sh
-sudo reboot
-```
+Programın kart üzerinde ne yazdırdığını görmek için:
 
-Bu komutu çalıştırdığınız an kart terminaliniz kopar (kart yeniden
-başlıyor). Birkaç saniye bekleyip `ssh gemstone@192.168.7.2` ile tekrar
-bağlanın (`ping 192.168.7.2` ile de kartın geri geldiğini kontrol
-edebilirsiniz), sonra yukarıdaki 6 kart-terminali komutunu tekrar
-çalıştırın (dosya zaten `/tmp/ap-k3.elf`'te duruyorsa scp adımını
-tekrarlamanıza gerek yok). **Yani her kod değişikliğinde döngü şu: reboot
-→ yeniden bağlan → yukarıdaki 6 komut.**
-
-Programın kart üzerinde ne yazdırdığını görmek için (kart terminalinde):
-
-```sh
-sudo cat /sys/kernel/debug/remoteproc/remoteproc2/trace0
+```bash
+gemstone@t3-gem-o1:~$ sudo cat /sys/kernel/debug/remoteproc/remoteproc2/trace0
 ```
 
 Bu, programın kendi tanılama/debug çıktısıdır (`trace0`). **16 KB ile
 sınırlı ve dairesel değildir** — dolunca yeni yazma durur, yani çok uzun
 süre çalışan bir programın çok eski çıktılarını burada göremezsiniz.
 
----
-
-## 9) Kalıcı hale getirme
+### 5.5. Kalıcı Hale Getirme
 
 Yukarıdaki bölüm, her reboot'ta kaybolan **geçici** bir test. Kartın **her
 açılışında otomatik olarak** bu firmware ile gelmesi için:
 
-Host terminalinde, dosyayı karta kopyalayın:
+Host tarafında, dosyayı karta kopyalayın:
 
-```sh
-sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
+```bash
+ubuntu@host:~$ sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
 ```
 
-Kart terminalinde (açık SSH oturumunuzda):
+Kart tarafında:
 
-```sh
+```bash
 # a) Orijinal fabrika firmware'ini yedekleyin (daha önce yedeklenmediyse)
-sudo sh -c 'test -f /lib/firmware/j722s-mcu-r5f0_0-fw.bak || cp /lib/firmware/j722s-mcu-r5f0_0-fw /lib/firmware/j722s-mcu-r5f0_0-fw.bak'
+gemstone@t3-gem-o1:~$ sudo sh -c 'test -f /lib/firmware/j722s-mcu-r5f0_0-fw.bak || cp /lib/firmware/j722s-mcu-r5f0_0-fw /lib/firmware/j722s-mcu-r5f0_0-fw.bak'
 
 # b) Kopyaladığınız dosyayı, remoteproc'un OTOMATİK yüklediği varsayılan dosyanın üzerine yazın
-sudo cp /tmp/ap-k3.elf /lib/firmware/j722s-mcu-r5f0_0-fw
+gemstone@t3-gem-o1:~$ sudo cp /tmp/ap-k3.elf /lib/firmware/j722s-mcu-r5f0_0-fw
 
 # c) Linux tarafındaki eski ArduCopter servisini KALICI olarak kapatın
-sudo systemctl disable --now arducopter
+gemstone@t3-gem-o1:~$ sudo systemctl disable --now arducopter
 ```
 
-Sonra [Bölüm 9.1](#91-3-adet-kart-üzerinde-çalışan-systemd-servisi)'deki 3
-servisi kurun, ardından reboot atıp doğrulayın (kart terminalinde):
+Sonra [Bölüm 5.5.1](#551-3-adet-kart-üzeri-systemd-servisi)'deki 3 servisi
+kurun, ardından reboot atıp doğrulayın:
 
-```sh
-sudo reboot
+```bash
+gemstone@t3-gem-o1:~$ sudo reboot
 ```
 
 **Geri alma** (her şeyi eski haline, Linux/ArduCopter'a döndürmek için —
-kart terminalinde):
+kart tarafında):
 
-```sh
-sudo cp /lib/firmware/j722s-mcu-r5f0_0-fw.bak /lib/firmware/j722s-mcu-r5f0_0-fw
-sudo systemctl disable chibios-spi-release chibios-pwm-clocks gem-storaged
-sudo systemctl enable arducopter
-sudo reboot
+```bash
+gemstone@t3-gem-o1:~$ sudo cp /lib/firmware/j722s-mcu-r5f0_0-fw.bak /lib/firmware/j722s-mcu-r5f0_0-fw
+gemstone@t3-gem-o1:~$ sudo systemctl disable chibios-spi-release chibios-pwm-clocks gem-storaged
+gemstone@t3-gem-o1:~$ sudo systemctl enable arducopter
+gemstone@t3-gem-o1:~$ sudo reboot
 ```
 
-### 9.1) 3 adet kart üzerinde çalışan systemd servisi
+#### 5.5.1. 3 Adet Kart-Üzeri systemd Servisi
 
 Bunların üçü de **kartın kendi Linux'unda** çalışır (host bilgisayarda
 değil). Aşağıda bunları SSH ile kuracağız, ama bu sadece dosyayı karta
@@ -361,81 +366,88 @@ aşağıda `gem-storaged` örneğiyle anlatılıyor. Tanımları
 | `chibios-pwm-clocks.service` | Motor PWM saat sinyallerini açar | **Çok kritik.** Bu olmadan arm işlemi başarılı görünür ama motorlar dönmez — bu saatleri normalde Linux'taki eski ArduCopter servisi kendiliğinden açardı, o kapatıldığı için artık hiçbir şey açmıyor |
 | `gem-storaged.service` | Parametre/kalibrasyon verisini kalıcı diske yazar | R5F'in yazdığı ayarlar (RC kalibrasyonu, PID'ler, vb.) normalde uçtuğu paylaşımlı bellek reboot'ta silinir; bu servis onları gerçek diske kaydeder |
 
-**`gem-storaged` neden mutlaka kartın kendisinde otomatik başlamalı, SSH
-ile elle/uzaktan tetiklenerek değil — somut bir örnekle:**
-
-`gem-storaged`'ın işi, R5F'in bellekte tuttuğu kalibrasyon/ayar verisini
-(RC kalibrasyonu, PID değerleri vb.) gerçek diske kaydetmek. Bu servis
-çalışmazsa bu veriler her reboot'ta sıfırlanıyor.
-
-Bir ara bu servis, host bilgisayardan SSH ile "kart açıldı, şimdi şu
-script'i çalıştır" şeklinde **her reboot'ta yeniden tetiklenen** bir
-yöntemle kurulmuştu. Bu neden riskliydi:
-
-1. Kart yeniden başladığında, host'un SSH ile bağlanabilmesi için önce
-   Linux tamamen açılmalı, sonra kartın USB-Ethernet ağı (`usb0`) ayağa
-   kalkmalı. Bu süre sabit değil — bazen birkaç saniye, bazen daha uzun
-   sürebiliyor.
-2. R5F tarafındaki ArduCopter ise açılışta kalibrasyon verisini en fazla
-   **60 saniye** bekliyor; bu süre içinde veri gelmezse "demek ki yok"
-   deyip boş/varsayılan bir veriyle devam ediyor.
-3. Bir seferinde ağın hazır olması 60 saniyeden uzun sürdü. SSH bağlantısı
-   kurulup `gem-storaged` fiilen çalışmaya başlayana kadar ArduCopter
-   zaten pes etmiş ve **gerçek kalibrasyon verisinin üzerine boş bir veri
-   yazmıştı** — bu veri bir daha geri gelmedi.
-
-Kesin çözüm: servisin başlamasını hiçbir şekilde ağa/SSH'a/host
-bilgisayara bağlı olmayan bir mekanizmaya bağlamak. Yukarıda anlatılan
-`sysinit.target`, kartın kendi Linux çekirdeği tarafından — USB kablosu
-takılı olsun olmasın, host bilgisayar açık olsun olmasın — otomatik
-tetiklenen bir aşama. Bu sayede `gem-storaged` artık her zaman
-ArduCopter'ın 60 saniyelik penceresinden çok önce hazır oluyor ve yarış
-durumu (iki şeyin kimin önce yetişeceğine bağlı olarak sonucun
-değişmesi) tamamen ortadan kalkıyor.
-
-**Olası kafa karışıklığı:** Az aşağıdaki kurulum komutları da SSH
-kullanıyor — bu tamamen normal, yukarıdaki sorunla çelişmiyor. Aradaki
-fark şu: aşağıdaki SSH komutları sadece dosyayı karta kopyalayıp
-systemd'ye "bunu kaydet, açılışta çalıştır" demek için **bir kereye
-mahsus** çalıştırılıyor — bir kurulum aracı olarak SSH. Kurulum bitince
-SSH'ın bu servisle bir ilgisi kalmıyor; servis artık kartın kendi
-systemd'i tarafından, her açılışta otomatik olarak, SSH'a hiç ihtiyaç
-duymadan başlatılıyor. Sorun yaratan eski yöntemde ise SSH bir kurulum
-aracı değil, servisin **her seferinde fiilen çalışabilmesinin ön koşulu**
-haline gelmişti — asıl fark budur.
+> **Not — `gem-storaged` neden mutlaka kartın kendisinde otomatik başlamalı,
+> SSH ile elle/uzaktan tetiklenerek değil:**
+>
+> `gem-storaged`'ın işi, R5F'in bellekte tuttuğu kalibrasyon/ayar verisini
+> (RC kalibrasyonu, PID değerleri vb.) gerçek diske kaydetmek. Bu servis
+> çalışmazsa bu veriler her reboot'ta sıfırlanıyor.
+>
+> Bir ara bu servis, host bilgisayardan SSH ile "kart açıldı, şimdi şu
+> script'i çalıştır" şeklinde **her reboot'ta yeniden tetiklenen** bir
+> yöntemle kurulmuştu. Bu neden riskliydi:
+>
+> 1. Kart yeniden başladığında, host'un SSH ile bağlanabilmesi için önce
+>    Linux tamamen açılmalı, sonra kartın USB-Ethernet ağı (`usb0`) ayağa
+>    kalkmalı. Bu süre sabit değil — bazen birkaç saniye, bazen daha uzun
+>    sürebiliyor.
+> 2. R5F tarafındaki ArduCopter ise açılışta kalibrasyon verisini en fazla
+>    **60 saniye** bekliyor; bu süre içinde veri gelmezse "demek ki yok"
+>    deyip boş/varsayılan bir veriyle devam ediyor.
+> 3. Bir seferinde ağın hazır olması 60 saniyeden uzun sürdü. SSH bağlantısı
+>    kurulup `gem-storaged` fiilen çalışmaya başlayana kadar ArduCopter
+>    zaten pes etmiş ve **gerçek kalibrasyon verisinin üzerine boş bir veri
+>    yazmıştı** — bu veri bir daha geri gelmedi.
+>
+> Kesin çözüm: servisin başlamasını hiçbir şekilde ağa/SSH'a/host
+> bilgisayara bağlı olmayan bir mekanizmaya bağlamak. Yukarıda anlatılan
+> `sysinit.target`, kartın kendi Linux çekirdeği tarafından — USB kablosu
+> takılı olsun olmasın, host bilgisayar açık olsun olmasın — otomatik
+> tetiklenen bir aşama. Bu sayede `gem-storaged` artık her zaman
+> ArduCopter'ın 60 saniyelik penceresinden çok önce hazır oluyor ve yarış
+> durumu (iki şeyin kimin önce yetişeceğine bağlı olarak sonucun
+> değişmesi) tamamen ortadan kalkıyor.
+>
+> **Olası kafa karışıklığı:** aşağıdaki kurulum komutları da SSH kullanıyor —
+> bu tamamen normal, yukarıdaki sorunla çelişmiyor. Aradaki fark şu:
+> aşağıdaki SSH komutları sadece dosyayı karta kopyalayıp systemd'ye "bunu
+> kaydet, açılışta çalıştır" demek için **bir kereye mahsus** çalıştırılıyor
+> — bir kurulum aracı olarak SSH. Kurulum bitince SSH'ın bu servisle bir
+> ilgisi kalmıyor; servis artık kartın kendi systemd'i tarafından, her
+> açılışta otomatik olarak, SSH'a hiç ihtiyaç duymadan başlatılıyor. Sorun
+> yaratan eski yöntemde ise SSH bir kurulum aracı değil, servisin **her
+> seferinde fiilen çalışabilmesinin ön koşulu** haline gelmişti — asıl fark
+> budur.
 
 Her birini kurmak için (`<dosya>` yerine servis adını yazın):
 
-Host terminalinde, dosyayı karta kopyalayın:
-
-```sh
-sshpass -p gem scp deploy/systemd-board/<dosya>.service gemstone@192.168.7.2:/tmp/<dosya>.service
+```bash
+ubuntu@host:~$ sshpass -p gem scp deploy/systemd-board/<dosya>.service gemstone@192.168.7.2:/tmp/<dosya>.service
 ```
 
-Kart terminalinde:
-
-```sh
-sudo cp /tmp/<dosya>.service /etc/systemd/system/<dosya>.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now <dosya>.service
+```bash
+gemstone@t3-gem-o1:~$ sudo cp /tmp/<dosya>.service /etc/systemd/system/<dosya>.service
+gemstone@t3-gem-o1:~$ sudo systemctl daemon-reload
+gemstone@t3-gem-o1:~$ sudo systemctl enable --now <dosya>.service
 ```
 
 `gem_storaged.service`'in çalıştırdığı Python betiğini de ayrıca kopyalamanız
-gerekiyor — host terminalinde:
+gerekiyor:
 
-```sh
-sshpass -p gem scp deploy/board/gem_storaged.py gemstone@192.168.7.2:/tmp/gem_storaged.py
+```bash
+ubuntu@host:~$ sshpass -p gem scp deploy/board/gem_storaged.py gemstone@192.168.7.2:/tmp/gem_storaged.py
 ```
 
-kart terminalinde:
-
-```sh
-sudo cp /tmp/gem_storaged.py /home/gemstone/gem_storaged.py
+```bash
+gemstone@t3-gem-o1:~$ sudo cp /tmp/gem_storaged.py /home/gemstone/gem_storaged.py
 ```
 
 ---
 
-## 10) QGroundControl bağlantısı
+## 6. Yapılandırma
+
+Bu firmware'de IMU okuma hızı donanımsal olarak 100Hz'e sabit (bkz.
+[Bölüm 8](#8-bilinen-kısıtlamalar)), bu yüzden ArduCopter'ın standart 400Hz
+döngü hızı desteklenmiyor. İlk bağlandığınızda QGroundControl'de
+**Vehicle Setup → Parameters** altından `SCHED_LOOP_RATE` parametresini
+**`50`** yapmanız gerekiyor — aksi halde "Main loop slow" / "Gyro rate"
+hatası alıp arm edemezsiniz.
+
+---
+
+## 7. Kullanım
+
+### 7.1. QGroundControl Bağlantısı
 
 R5F üzerindeki ArduCopter, MAVLink verisini fiziksel bir kabloya değil,
 Linux ile paylaştığı bir bellek bölgesine (adres `0xA1120000`, 64 KiB)
@@ -454,51 +466,44 @@ QGroundControl'ün anlayacağı normal bir ağ bağlantısına (UDP 14550)
 Host bilgisayarınızda arka planda sürekli çalışması için bir kullanıcı
 systemd servisi olarak kurulur:
 
-```sh
-mkdir -p ~/.config/systemd/user
-cp deploy/systemd-host/gem-mavbridge.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now gem-mavbridge
-loginctl enable-linger "$USER"
+```bash
+ubuntu@host:~$ mkdir -p ~/.config/systemd/user
+ubuntu@host:~$ cp deploy/systemd-host/gem-mavbridge.service ~/.config/systemd/user/
+ubuntu@host:~$ systemctl --user daemon-reload
+ubuntu@host:~$ systemctl --user enable --now gem-mavbridge
+ubuntu@host:~$ loginctl enable-linger "$USER"
 ```
 
-(`deploy/systemd-host/gem-mavbridge.service` içindeki `ExecStart` satırının
-`run_bridge.py` dosyanızın gerçek konumuna işaret ettiğinden emin olun.)
-
-`loginctl enable-linger` komutu, siz oturumu kapatsanız bile bu servisin
-arka planda çalışmaya devam etmesini sağlar.
+> **Not:** `deploy/systemd-host/gem-mavbridge.service` içindeki `ExecStart`
+> satırının `run_bridge.py` dosyanızın gerçek konumuna işaret ettiğinden
+> emin olun. `loginctl enable-linger` komutu, siz oturumu kapatsanız bile bu
+> servisin arka planda çalışmaya devam etmesini sağlar.
 
 Kurulum bittikten sonra QGroundControl'ü açmanız yeterli — herhangi bir
 özel ayar yapmadan otomatik olarak UDP 14550'yi dinler ve bağlanır.
 "Not Ready" yazısı ve ArduPilot logosu görürseniz bağlantı başarılıdır.
 
----
-
-## 11) Doğrulama listesi
+### 7.2. Doğrulama Listesi
 
 Her şeyin doğru kurulduğunu teyit etmek için:
 
-Kart terminalinde:
-
-```sh
+```bash
 # R5F kendi firmware'ini otomatik yüklüyor mu:
-cat /sys/class/remoteproc/remoteproc2/state /sys/class/remoteproc/remoteproc2/firmware
+gemstone@t3-gem-o1:~$ cat /sys/class/remoteproc/remoteproc2/state /sys/class/remoteproc/remoteproc2/firmware
 # -> "running" ve "j722s-mcu-r5f0_0-fw" yazmalı
 
 # Linux tarafındaki eski ArduCopter gerçekten kapalı mı:
-systemctl is-active arducopter; systemctl is-enabled arducopter
+gemstone@t3-gem-o1:~$ systemctl is-active arducopter; systemctl is-enabled arducopter
 # -> inactive / disabled yazmalı
 
 # 3 kart-üzeri servis çalışıyor mu:
-systemctl is-active chibios-spi-release chibios-pwm-clocks gem-storaged
+gemstone@t3-gem-o1:~$ systemctl is-active chibios-spi-release chibios-pwm-clocks gem-storaged
 # -> üçü de "active" yazmalı
 ```
 
-Host terminalinde:
-
-```sh
+```bash
 # Host'taki köprü servisi çalışıyor mu:
-systemctl --user is-active gem-mavbridge
+ubuntu@host:~$ systemctl --user is-active gem-mavbridge
 # -> "active" yazmalı
 ```
 
@@ -507,15 +512,14 @@ görünmeli.
 
 ---
 
-## 12) Bilinen kısıtlamalar
+## 8. Bilinen Kısıtlamalar
 
 Bunlar 2026-08-18'deki doğrulanmış uçuş anındaki gerçek durumdur — birer
 "bug" değil, bu deneysel kurulumun şu anki gerçek sınırları:
 
-- **Chibos için GPS henüz
-  test edilmedi.** Normal Linux/ArduCopter kurulumunda GPS `UART-MAIN6`
-  adlı seri porta bağlı ve orada sorunsuz çalışıyor (bu portun kartın
-  üzerinde tam olarak hangi pin olduğu T3'ün
+- **Chibos için GPS henüz test edilmedi.** Normal Linux/ArduCopter
+  kurulumunda GPS `UART-MAIN6` adlı seri porta bağlı ve orada sorunsuz
+  çalışıyor (bu portun kartın üzerinde tam olarak hangi pin olduğu T3'ün
   [ArduPilot sayfasında](https://docs.t3gemstone.org/tr/projects/ardupilot)
   anlatılıyor). Ama bu depodaki ChibiOS/R5F HAL'inde (`AP_HAL_ChibiOS_K3`)
   o portun karşılığı olan `serial3` hâlâ boş bir stub — gerçek bir
@@ -524,7 +528,7 @@ Bunlar 2026-08-18'deki doğrulanmış uçuş anındaki gerçek durumdur — bire
   donanım ailesinden başka bir porta — RC girişi için — başarıyla
   erişiyor), bunun üzerine sadece erişilebilirliği sınayan minimal bir
   test kodu (`am67_uart6_probe`) yazılıp derlendi ama **gerçek kartta
-  hiç çalıştırılmadı** (bkz. [Bölüm 13](#13-sorun-giderme)'teki not).
+  hiç çalıştırılmadı** (bkz. [Bölüm 9](#9-sorun-giderme)'daki not).
   Yani altyapı hazır, doğrulama yapılmadı. Bugün itibariyle sonuç aynı:
   GPS gerektiren modlar (Auto, Guided, RTL, PosHold) **kullanılamaz** —
   sadece Stabilize/Acro gibi GPS'siz modlar çalışır.
@@ -532,16 +536,16 @@ Bunlar 2026-08-18'deki doğrulanmış uçuş anındaki gerçek durumdur — bire
   denenmişti ama sessizce hatalı veri üretiyordu (her eksende 1 bit
   bozuluyordu), bu yüzden bilinçli olarak yavaş ama güvenilir yönteme
   geri dönüldü. Sonuç: ArduCopter'ın standart 400Hz döngü hızı
-  desteklenmiyor, `SCHED_LOOP_RATE` parametresini QGroundControl'den
-  (ya da MAVLink üzerinden) **`50`** yapmanız gerekiyor, yoksa "Main loop
-  slow" / "Gyro rate" hatası alıp arm edemezsiniz.
+  desteklenmiyor, `SCHED_LOOP_RATE` parametresini **`50`** yapmanız
+  gerekiyor (bkz. [Bölüm 6](#6-yapılandırma)), yoksa "Main loop slow" /
+  "Gyro rate" hatası alıp arm edemezsiniz.
 - **`ARMING_CHECK` parametresi "eksik" görünüyor**, QGC bir uyarı
   gösteriyor — zararsız bir kozmetik sorun (ArduPilot'un kendisi bu
   parametrenin adını yakın zamanda değiştirdi, QGC'nin dahili listesi
   henüz güncellenmedi). Arm'ı veya uçuşu engellemiyor, görmezden
   gelebilirsiniz.
-- **Her firmware değişikliğinde tam reboot şart** (bkz. Bölüm 8) — ileride
-  düzeltilebilir bir eksiklik, henüz düzeltilmedi.
+- **Her firmware değişikliğinde tam reboot şart** (bkz. [Bölüm 5.4](#54-karta-ilk-deploy-test-amaçlı-kalıcı-değil)) —
+  ileride düzeltilebilir bir eksiklik, henüz düzeltilmedi.
 - **`trace0` debug çıktısı sınırlı** — 16 KB, dairesel değil. Uzun süre
   çalışan bir programın eski çıktılarını göremezsiniz, sadece anlık
   tanılama için kullanışlı.
@@ -550,17 +554,17 @@ Bunlar 2026-08-18'deki doğrulanmış uçuş anındaki gerçek durumdur — bire
 
 ---
 
-## 13) Sorun giderme
+## 9. Sorun Giderme
 
 **"can't stop rproc: -16" veya "module-reset assert failed, ret=-19" hatası
 alıyorum:** R5F şu an kendi (ChibiOS) firmware'imizi çalıştırıyor ve bu
 firmware "durdur" komutuna düzgün cevap vermiyor. Çözüm: kartı tam reboot
-edin, SSH geri geldikten sonra deploy adımlarını (Bölüm 8) baştan
-uygulayın. Kısayol yok, her seferinde reboot gerekiyor.
+edin, SSH geri geldikten sonra deploy adımlarını ([Bölüm 5.4](#54-karta-ilk-deploy-test-amaçlı-kalıcı-değil))
+baştan uygulayın. Kısayol yok, her seferinde reboot gerekiyor.
 
 **Arm oluyor ama motorlar hiç dönmüyor:** `chibios-pwm-clocks.service`
-kurulu ve çalışır durumda mı kontrol edin (Bölüm 9.1). Bu servis
-olmadan motor sürücü saatleri hiç açılmıyor.
+kurulu ve çalışır durumda mı kontrol edin ([Bölüm 5.5.1](#551-3-adet-kart-üzeri-systemd-servisi)).
+Bu servis olmadan motor sürücü saatleri hiç açılmıyor.
 
 **QGroundControl bağlanmıyor:** Sırasıyla kontrol edin: (1) kart açık ve
 USB-C ile bağlı mı, (2) `systemctl --user is-active gem-mavbridge` "active"
@@ -569,7 +573,8 @@ diyor mu, (3) R5F gerçekten çalışıyor mu (`remoteproc2/state` → "running"
 **Kalibrasyon/ayarlar reboot sonrası kayboluyor:** `gem-storaged.service`
 kurulu mu ve **board-native** mi (SSH ile değil, kartın kendi systemd'i
 üzerinden) çalıştığını doğrulayın — SSH ile tetiklenen bir sürüm bir kez
-gerçek veriyi silmişti (Bölüm 9.1'deki uyarıya bakın).
+gerçek veriyi silmişti ([Bölüm 5.5.1](#551-3-adet-kart-üzeri-systemd-servisi)'deki
+uyarıya bakın).
 
 **`/dev/mem` üzerinden bir şey okurken/yazarken "Bus error" ile program
 çöküyor:** Bu kartta, R5F ile paylaşılan bellek bölgelerine erişirken hem
@@ -587,7 +592,7 @@ güncel durumunu takip eden kişiyle konuşun.
 
 ---
 
-## 14) Depo yapısı
+## 10. Depo Yapısı
 
 ```
 .                                  ArduPilot kaynağı (emirhan-sonmez/ardupilot @ gemstone-o1-r5f-hal)
