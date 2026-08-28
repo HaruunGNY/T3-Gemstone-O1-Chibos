@@ -145,9 +145,10 @@ Neden bunlar:
 - `empy` — waf'ın derleme sırasında kullandığı bir şablon (template) kütüphanesi.
   `pip install empy==3.3.4` ile kurulmalı; sürüm önemli, farklı bir sürüm
   derleme hatası verebilir.
-- `sshpass` — kart parolasını komutlara otomatik geçmek için (aşağıdaki tüm
-  `ssh`/`scp` komutları bunu kullanıyor, her seferinde elle parola
-  yazmamak için).
+- `sshpass` — dosya kopyalarken (`scp`) kart parolasını otomatik geçmek
+  için (aşağıdaki `scp` komutları bunu kullanıyor). Kart üzerinde komut
+  çalıştırmak için ise bir kez `ssh gemstone@192.168.7.2` ile bağlanıp o
+  terminali açık bırakacaksınız — parolayı orada elle bir kez girersiniz.
 
 Kurulumun doğru olduğunu kontrol edin:
 
@@ -225,29 +226,45 @@ Kart bilgileri (hepsi T3'ün resmi imajının varsayılanı):
 - sudo parolası: `gem`
 
 Kartı USB-C kablo ile host bilgisayara bağlayın, kartın açık olduğundan
-emin olun, sonra host'ta:
+emin olun. Bundan sonra iki terminal kullanacaksınız.
+
+**Host terminali** — derlenen dosyayı karta kopyalayın:
 
 ```sh
 sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl stop arducopter"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'echo 4b00000.spi > /sys/bus/platform/drivers/omap2_mcspi/unbind'"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /tmp/ap-k3.elf /lib/firmware/ap-k3.elf"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'echo stop > /sys/class/remoteproc/remoteproc2/state'"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'echo ap-k3.elf > /sys/class/remoteproc/remoteproc2/firmware'"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'echo start > /sys/class/remoteproc/remoteproc2/state'"
+```
+
+**Kart terminali** — karta bir kez bağlanın ve bu oturumu açık bırakın:
+
+```sh
+ssh gemstone@192.168.7.2   # parola: gem
+```
+
+Bundan sonraki tüm kart-tarafı komutları (bu bölümde ve devamındaki
+bölümlerde) artık o açık kalan terminalde çalıştıracaksınız — her komut
+için ayrıca `ssh`/`sshpass` yazmanıza gerek yok, `sudo` parola sorduğunda
+elle `gem` yazın:
+
+```sh
+sudo systemctl stop arducopter
+sudo sh -c 'echo 4b00000.spi > /sys/bus/platform/drivers/omap2_mcspi/unbind'
+sudo cp /tmp/ap-k3.elf /lib/firmware/ap-k3.elf
+sudo sh -c 'echo stop > /sys/class/remoteproc/remoteproc2/state'
+sudo sh -c 'echo ap-k3.elf > /sys/class/remoteproc/remoteproc2/firmware'
+sudo sh -c 'echo start > /sys/class/remoteproc/remoteproc2/state'
 ```
 
 Satır satır ne yapıyor:
-1. Derlenen dosyayı karta kopyalar (`scp`).
-2. Linux/A53 tarafındaki eski ArduCopter servisini durdurur (artık R5F
+1. Linux/A53 tarafındaki eski ArduCopter servisini durdurur (artık R5F
    devralacak).
-3. IMU sensörünün bağlı olduğu SPI yolunu Linux'un elinden alıp R5F'e
+2. IMU sensörünün bağlı olduğu SPI yolunu Linux'un elinden alıp R5F'e
    serbest bırakır (ikisi aynı anda kullanamaz).
-4. Dosyayı, remoteproc'un beklediği konuma (`/lib/firmware/`) kopyalar.
-5-7. remoteproc'a "durdur, şu yeni dosyayı yükle, başlat" der.
+3. Dosyayı, remoteproc'un beklediği konuma (`/lib/firmware/`) kopyalar.
+4-6. remoteproc'a "durdur, şu yeni dosyayı yükle, başlat" der.
 
-**ÖNEMLİ KISITLAMA — mutlaka okuyun:** 5. adımdaki `"stop"` komutu **sadece
-R5F o an TI'nın fabrika/stok firmware'ini çalıştırıyorsa** düzgün çalışır.
+**ÖNEMLİ KISITLAMA — mutlaka okuyun:** yukarıdaki bloktaki `remoteproc2/state`'e
+`"stop"` yazan komut **sadece R5F o an TI'nın fabrika/stok firmware'ini
+çalıştırıyorsa** düzgün çalışır.
 Bizim kendi (ChibiOS/ArduCopter) firmware'imiz, remoteproc'un "durdur"
 komutu için beklediği özel bir el sıkışma sinyalini (mailbox) henüz
 implement etmiyor. Yani **R5F zaten bizim firmware'imizi çalıştırıyorsa,
@@ -255,17 +272,21 @@ yukarıdaki sıralamayla yeni bir sürüm YÜKLEYEMEZSİNİZ** — önce kartı
 **tamamen reboot etmeniz** gerekir:
 
 ```sh
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S reboot"
+sudo reboot
 ```
 
-birkaç saniye bekleyip SSH'in geri geldiğini doğrulayın (`ping 192.168.7.2`
-veya tekrar tekrar `ssh` deneyin), sonra yukarıdaki 7 komutu çalıştırın.
-**Yani her kod değişikliğinde döngü şu: reboot → yukarıdaki 7 komut.**
+Bu komutu çalıştırdığınız an kart terminaliniz kopar (kart yeniden
+başlıyor). Birkaç saniye bekleyip `ssh gemstone@192.168.7.2` ile tekrar
+bağlanın (`ping 192.168.7.2` ile de kartın geri geldiğini kontrol
+edebilirsiniz), sonra yukarıdaki 6 kart-terminali komutunu tekrar
+çalıştırın (dosya zaten `/tmp/ap-k3.elf`'te duruyorsa scp adımını
+tekrarlamanıza gerek yok). **Yani her kod değişikliğinde döngü şu: reboot
+→ yeniden bağlan → yukarıdaki 6 komut.**
 
-Programın kart üzerinde ne yazdırdığını görmek için:
+Programın kart üzerinde ne yazdırdığını görmek için (kart terminalinde):
 
 ```sh
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cat /sys/kernel/debug/remoteproc/remoteproc2/trace0"
+sudo cat /sys/kernel/debug/remoteproc/remoteproc2/trace0
 ```
 
 Bu, programın kendi tanılama/debug çıktısıdır (`trace0`). **16 KB ile
@@ -279,32 +300,40 @@ süre çalışan bir programın çok eski çıktılarını burada göremezsiniz.
 Yukarıdaki bölüm, her reboot'ta kaybolan **geçici** bir test. Kartın **her
 açılışında otomatik olarak** bu firmware ile gelmesi için:
 
+Host terminalinde, dosyayı karta kopyalayın:
+
+```sh
+sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
+```
+
+Kart terminalinde (açık SSH oturumunuzda):
+
 ```sh
 # a) Orijinal fabrika firmware'ini yedekleyin (daha önce yedeklenmediyse)
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S sh -c 'test -f /lib/firmware/j722s-mcu-r5f0_0-fw.bak || cp /lib/firmware/j722s-mcu-r5f0_0-fw /lib/firmware/j722s-mcu-r5f0_0-fw.bak'"
+sudo sh -c 'test -f /lib/firmware/j722s-mcu-r5f0_0-fw.bak || cp /lib/firmware/j722s-mcu-r5f0_0-fw /lib/firmware/j722s-mcu-r5f0_0-fw.bak'
 
-# b) Kendi dosyanızı, remoteproc'un OTOMATİK yüklediği varsayılan dosyanın üzerine yazın
-sshpass -p gem scp build/GemstoneO1R5F/bin/arducopter gemstone@192.168.7.2:/tmp/ap-k3.elf
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /tmp/ap-k3.elf /lib/firmware/j722s-mcu-r5f0_0-fw"
+# b) Kopyaladığınız dosyayı, remoteproc'un OTOMATİK yüklediği varsayılan dosyanın üzerine yazın
+sudo cp /tmp/ap-k3.elf /lib/firmware/j722s-mcu-r5f0_0-fw
 
 # c) Linux tarafındaki eski ArduCopter servisini KALICI olarak kapatın
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl disable --now arducopter"
+sudo systemctl disable --now arducopter
 ```
 
 Sonra [Bölüm 9.1](#91-3-adet-kart-üzerinde-çalışan-systemd-servisi)'deki 3
-servisi kurun, ardından reboot atıp doğrulayın:
+servisi kurun, ardından reboot atıp doğrulayın (kart terminalinde):
 
 ```sh
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S reboot"
+sudo reboot
 ```
 
-**Geri alma** (her şeyi eski haline, Linux/ArduCopter'a döndürmek için):
+**Geri alma** (her şeyi eski haline, Linux/ArduCopter'a döndürmek için —
+kart terminalinde):
 
 ```sh
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /lib/firmware/j722s-mcu-r5f0_0-fw.bak /lib/firmware/j722s-mcu-r5f0_0-fw"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl disable chibios-spi-release chibios-pwm-clocks gem-storaged"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl enable arducopter"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S reboot"
+sudo cp /lib/firmware/j722s-mcu-r5f0_0-fw.bak /lib/firmware/j722s-mcu-r5f0_0-fw
+sudo systemctl disable chibios-spi-release chibios-pwm-clocks gem-storaged
+sudo systemctl enable arducopter
+sudo reboot
 ```
 
 ### 9.1) 3 adet kart üzerinde çalışan systemd servisi
@@ -377,19 +406,31 @@ haline gelmişti — asıl fark budur.
 
 Her birini kurmak için (`<dosya>` yerine servis adını yazın):
 
+Host terminalinde, dosyayı karta kopyalayın:
+
 ```sh
 sshpass -p gem scp deploy/systemd-board/<dosya>.service gemstone@192.168.7.2:/tmp/<dosya>.service
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /tmp/<dosya>.service /etc/systemd/system/<dosya>.service"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl daemon-reload"
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S systemctl enable --now <dosya>.service"
+```
+
+Kart terminalinde:
+
+```sh
+sudo cp /tmp/<dosya>.service /etc/systemd/system/<dosya>.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now <dosya>.service
 ```
 
 `gem_storaged.service`'in çalıştırdığı Python betiğini de ayrıca kopyalamanız
-gerekiyor:
+gerekiyor — host terminalinde:
 
 ```sh
 sshpass -p gem scp deploy/board/gem_storaged.py gemstone@192.168.7.2:/tmp/gem_storaged.py
-sshpass -p gem ssh gemstone@192.168.7.2 "echo gem | sudo -S cp /tmp/gem_storaged.py /home/gemstone/gem_storaged.py"
+```
+
+kart terminalinde:
+
+```sh
+sudo cp /tmp/gem_storaged.py /home/gemstone/gem_storaged.py
 ```
 
 ---
@@ -437,25 +478,32 @@ Kurulum bittikten sonra QGroundControl'ü açmanız yeterli — herhangi bir
 
 Her şeyin doğru kurulduğunu teyit etmek için:
 
+Kart terminalinde:
+
 ```sh
 # R5F kendi firmware'ini otomatik yüklüyor mu:
-sshpass -p gem ssh gemstone@192.168.7.2 "cat /sys/class/remoteproc/remoteproc2/state /sys/class/remoteproc/remoteproc2/firmware"
+cat /sys/class/remoteproc/remoteproc2/state /sys/class/remoteproc/remoteproc2/firmware
 # -> "running" ve "j722s-mcu-r5f0_0-fw" yazmalı
 
 # Linux tarafındaki eski ArduCopter gerçekten kapalı mı:
-sshpass -p gem ssh gemstone@192.168.7.2 "systemctl is-active arducopter; systemctl is-enabled arducopter"
+systemctl is-active arducopter; systemctl is-enabled arducopter
 # -> inactive / disabled yazmalı
 
 # 3 kart-üzeri servis çalışıyor mu:
-sshpass -p gem ssh gemstone@192.168.7.2 "systemctl is-active chibios-spi-release chibios-pwm-clocks gem-storaged"
+systemctl is-active chibios-spi-release chibios-pwm-clocks gem-storaged
 # -> üçü de "active" yazmalı
+```
 
+Host terminalinde:
+
+```sh
 # Host'taki köprü servisi çalışıyor mu:
 systemctl --user is-active gem-mavbridge
 # -> "active" yazmalı
-
-# QGroundControl'ü açın — "Not Ready" / "Stabilize" + ArduPilot logosu görünmeli
 ```
+
+Sonra QGroundControl'ü açın — "Not Ready" / "Stabilize" + ArduPilot logosu
+görünmeli.
 
 ---
 
