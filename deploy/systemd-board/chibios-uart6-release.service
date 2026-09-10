@@ -1,0 +1,13 @@
+[Unit]
+Description=Release UART6 (2860000.serial, GPS's UART) from Linux so the MCU R5F (ChibiOS) can reach it
+DefaultDependencies=no
+After=sysinit.target
+Before=basic.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo 2860000.serial > /sys/bus/platform/drivers/omap8250/unbind || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

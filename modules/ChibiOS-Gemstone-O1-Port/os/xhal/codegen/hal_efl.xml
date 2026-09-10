@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.chibios.org/xml/schema/ccode/modules.xsd"
+  name="hal_efl" descr="Embedded Flash Driver" check="HAL_USE_EFL == TRUE"
+  editcode="false">
+  <brief>Embedded Flash Driver macros and structures.</brief>
+  <imports>
+    <import>hal_flash_base.xml</import>
+  </imports>
+  <public>
+    <includes_always>
+      <include style="regular">hal_flash_base.h</include>
+    </includes_always>
+    <types>
+      <typedef name="hal_efl_driver_c">
+        <brief>Type of structure representing an embedded flash driver.</brief>
+        <basetype ctype="struct hal_efl_driver" />
+      </typedef>
+      <typedef name="hal_efl_config_t">
+        <brief>Type of structure representing an embedded flash configuration.</brief>
+        <basetype ctype="struct hal_efl_config" />
+      </typedef>
+      <verbatim><![CDATA[
+typedef struct hal_efl_driver EFlashDriver;
+typedef struct hal_efl_config EFlashConfig;
+
+/* Inclusion of LLD header.*/
+#include "hal_efl_lld.h"]]></verbatim>
+      <struct name="hal_efl_config">
+        <brief>Driver configuration structure.</brief>
+        <fields>
+          <verbatim><![CDATA[
+/* End of the mandatory fields.*/
+efl_lld_config_fields;]]></verbatim>
+        </fields>
+      </struct>
+      <class type="regular" name="hal_efl_driver" namespace="efl"
+        ancestorname="hal_flash_base" descr="Embedded Flash driver">
+        <brief>Class of an embedded flash driver.</brief>
+        <fields>
+          <verbatim><![CDATA[
+/* End of the mandatory fields.*/
+efl_lld_driver_fields;]]></verbatim>
+        </fields>
+        <methods>
+          <objinit callsuper="true">
+            <implementation><![CDATA[
+]]></implementation>
+          </objinit>
+          <dispose>
+            <implementation><![CDATA[
+]]></implementation>
+          </dispose>
+          <override>
+            <method shortname="start">
+              <implementation><![CDATA[
+if (config != NULL) {
+  self->config = __efl_setcfg_impl(self, config);
+}
+else {
+  self->config = __efl_selcfg_impl(self, 0U);
+}
+
+if (self->config == NULL) {
+  return HAL_RET_CONFIG_ERROR;
+}
+
+return efl_lld_start(self);]]></implementation>
+            </method>
+            <method shortname="stop">
+              <implementation><![CDATA[
+efl_lld_stop(self);]]></implementation>
+            </method>
+            <method shortname="setcfg">
+              <implementation><![CDATA[
+static const hal_efl_config_t default_config = {0};
+
+(void)self;
+
+if (config == NULL) {
+  return &default_config;
+}
+
+return config;]]></implementation>
+            </method>
+            <method shortname="selcfg">
+              <implementation><![CDATA[
+static const hal_efl_config_t default_config = {0};
+
+(void)self;
+
+if (cfgnum == 0U) {
+  return &default_config;
+}
+
+return NULL;]]></implementation>
+            </method>
+            <method shortname="read">
+              <implementation><![CDATA[
+return efl_lld_read(self, offset, n, rp);]]></implementation>
+            </method>
+            <method shortname="program">
+              <implementation><![CDATA[
+return efl_lld_program(self, offset, n, pp);]]></implementation>
+            </method>
+            <method shortname="start_erase_all">
+              <implementation><![CDATA[
+return efl_lld_start_erase_all(self);]]></implementation>
+            </method>
+            <method shortname="start_erase_sector">
+              <implementation><![CDATA[
+return efl_lld_start_erase_sector(self, sector);]]></implementation>
+            </method>
+            <method shortname="query_erase">
+              <implementation><![CDATA[
+return efl_lld_query_erase(self, msec);]]></implementation>
+            </method>
+            <method shortname="verify_erase">
+              <implementation><![CDATA[
+return efl_lld_verify_erase(self, sector);]]></implementation>
+            </method>
+          </override>
+        </methods>
+      </class>
+    </types>
+    <functions>
+      <function name="eflInit" ctype="void">
+        <brief>Embedded Flash Driver initialization.</brief>
+        <init />
+        <implementation><![CDATA[
+efl_lld_init();]]></implementation>
+      </function>
+    </functions>
+  </public>
+  <private>
+    <includes_always>
+      <include style="regular">hal.h</include>
+    </includes_always>
+  </private>
+</module>
