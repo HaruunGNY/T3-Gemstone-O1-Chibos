@@ -10,9 +10,6 @@
 
 [![T3 Foundation](./.meta/t3-foundation.svg)](https://www.t3vakfi.org/en) [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](COPYING.txt)
 
-> **Resmi olmayan, bağımsız bir çalışma.** T3 Vakfı'nın resmi bir projesi
-> değildir — T3 Gemstone O1 donanımını hedefleyen, T3 ekibinden bağımsız bir
-> geliştiricinin deneysel çalışmasıdır.
 
 Bu doküman, T3 Gemstone O1 kartında gerçek ArduCopter uçuş kontrolcüsünü,
 Linux yerine doğrudan kartın **R5F** çekirdeğinde, **ChibiOS** adlı bir
@@ -20,7 +17,7 @@ gerçek-zamanlı işletim sistemi (RTOS) üzerinde çalıştırmayı anlatır.
 
 Hedef kitle: bu konuda **hiçbir ön bilgisi olmayan biri**. Terminal kullanmayı
 biliyorsanız (komut kopyalayıp yapıştırabiliyorsanız) yeterli — geri kalan her
-kavram aşağıda açıklanıyor. Bu kurulum 2026-08-18'de gerçek donanımda uçuşla
+kavram aşağıda açıklanıyor. Bu kurulum gerçek donanımda uçuşla
 doğrulandı, yani burada anlatılanlar "teoride çalışır" değil, fiilen çalışmış
 bir sonuç.
 
